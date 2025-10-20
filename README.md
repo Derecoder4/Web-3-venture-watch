@@ -32,7 +32,7 @@ Clone the repository:
 
 Bash
 
-git clone https://github.com/Angelokhare/Doddy-framework-guide.git
+git  https://github.com/Derecoder4/sentient-ai-content-bot.git
 cd Doddy-framework-guide
 Create and activate a virtual environment:
 
