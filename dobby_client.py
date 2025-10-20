@@ -2,30 +2,43 @@
 import os
 import requests
 
-# Get the API key from our .env file
-SENTIENT_API_KEY = os.getenv("SENTIENT_API_KEY")
-# IMPORTANT: Use the actual API URL provided by Sentient. This is a placeholder.
-DOBBY_API_URL = "https://api.sentient.xyz/v1/models/dobby/query"
+# This is the correct API provider and endpoint
+API_URL = "https://api.fireworks.ai/inference/v1/completions"
 
 def get_dobby_response(prompt: str) -> str:
     """
-    Sends a prompt to the Dobby API and gets a response.
+    Sends a prompt to the Dobby model via the Fireworks AI API.
     """
-    if not SENTIENT_API_KEY:
-        return "Error: SENTIENT_API_KEY is not set. Please check your .env file."
+    # This now gets the Fireworks API key from your .env file
+    api_key = os.getenv("FIREWORKS_API_KEY") 
+    
+    if not api_key:
+        return "Error: FIREWORKS_API_KEY is not set. Please check your .env file."
 
     headers = {
-        "Authorization": f"Bearer {SENTIENT_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "Accept": "application/json",
     }
-    data = {"prompt": prompt}
+    
+    data = {
+        "model": "accounts/sentientfoundation/models/dobby-unhinged-llama-3-3-70b-new",
+        "prompt": prompt,
+        "max_tokens": 512,  # Controls the length of the response
+        "temperature": 0.7, # Controls the creativity of the response
+    }
 
     try:
-        response = requests.post(DOBBY_API_URL, headers=headers, json=data)
-        response.raise_for_status()
+        response = requests.post(API_URL, headers=headers, json=data)
+        response.raise_for_status() 
         
-        # Adjust '.get("response")' based on the actual API output from Sentient's docs
-        return response.json().get("response", "Sorry, I received an empty response.")
+        # Fireworks API returns the text in response['choices'][0]['text']
+        response_data = response.json()
+        return response_data['choices'][0]['text'].strip()
+        
+    except requests.exceptions.HTTPError as e:
+        print(f"SERVER ERROR: {e.response.status_code} - {e.response.text}")
+        return "Sorry, the server responded with an error. Check the terminal for details."
     except requests.exceptions.RequestException as e:
-        print(f"API request failed: {e}")
-        return "Sorry, I had trouble connecting to the Dobby AI."
+        print(f"CONNECTION ERROR: {e}")
+        return "Sorry, I had trouble connecting to the Fireworks AI API."
