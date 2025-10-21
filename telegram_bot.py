@@ -82,7 +82,9 @@ async def cancel(update: Update, context: CallbackContext) -> None:
         reply_markup=MAIN_MARKUP
     )
 
-# --- Conversation & Message Handler ---
+
+
+        # --- Conversation & Message Handler ---
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
     """Handles all text messages and routes them based on state."""
@@ -116,7 +118,6 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         return
 
     elif state == 'AWAITING_TONE':
-        # Check if the tone is one of the valid options
         if text not in ["Shitposter", "Conversational", "Philosophical", "Researcher", "Trader"]:
             await update.message.reply_text("Please select a valid tone from the keyboard.", reply_markup=TONE_MARKUP)
             return
@@ -138,19 +139,40 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         context.user_data['quantity'] = quantity
         await update.message.reply_text(
             f"🤖 Got it. Generating {quantity} thread(s) about '{context.user_data['topic']}' in a '{context.user_data['tone']}' tone...",
-            reply_markup=MAIN_MARKUP # Return to main menu
+            reply_markup=MAIN_MARKUP
         )
         
-        # --- Build the new, powerful prompt ---
+        # --- NEW: Build a smarter prompt ---
+        
+        # First, let's create better descriptions for each tone
+        tone = context.user_data['tone']
+        tone_description = ""
+        if tone == "Shitposter":
+            tone_description = "Witty, edgy, provocative, and informal. Use strong, contrarian opinions. (Avoid constant, low-effort profanity; be clever)."
+        elif tone == "Conversational":
+            tone_description = "Friendly, approachable, and easy to read, as if explaining to a friend."
+        elif tone == "Philosophical":
+            tone_description = "Deep, abstract, and thought-provoking. Focus on the 'why' and the bigger picture."
+        elif tone == "Researcher":
+            tone_description = "Data-driven, objective, and analytical. Use formal language and cite concepts (hypothetically)."
+        elif tone == "Trader":
+            tone_description = "Action-oriented, concise, and focused on market impact, price action, and potential opportunities."
+
+        # Second, build the final prompt with new formatting rules
         final_prompt = (
             f"You are an expert content creator. A user wants you to generate {context.user_data['quantity']} "
-            f"fully-formed, ready-to-post Twitter threads about the topic: '{context.user_data['topic']}'.\n\n"
-            f"**CRITICAL INSTRUCTIONS:**\n"
-            f"1.  **Tone:** You MUST write in a {context.user_data['tone']} tone.\n"
-            f"2.  **Format:** Do NOT use bullet points. Write out the full text of the thread(s) with deep insights.\n"
-            f"3.  **Structure:** Each thread should be a complete piece. If generating more than one, separate them with '--- THREAD 1 ---', '--- THREAD 2 ---', etc.\n"
-            f"4.  **Content:** Go beyond a simple outline. Provide actual analysis, opinions, or data as the tone dictates."
+            f"ready-to-post Twitter threads about the topic: '{context.user_data['topic']}'.\n\n"
+            f"**CRITICAL INSTRUCTIONS:**\n\n"
+            f"1.  **TONE:** You MUST write in the following tone: **{tone_description}**\n\n"
+            
+            f"2.  **CONTENT:** Do NOT use bullet points. Write out the full text of the thread(s) with deep insights, analysis, and opinions. Each tweet should be a full paragraph.\n\n"
+            
+            f"3.  **FORMATTING (VERY IMPORTANT):**\n"
+            f"    - Each thread must have 6-8 tweets.\n"
+            f"    - **Separate each individual tweet (e.g., 1/8, 2/8) with a new line.** This is crucial for readability.\n"
+            f"    - If generating more than one thread, separate them with a clear marker like '--- THREAD 2 ---'.\n"
         )
+        # --- End of new prompt ---
 
         # Get the response from Dobby
         response = get_dobby_response(final_prompt)
