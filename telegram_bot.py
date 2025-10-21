@@ -1,5 +1,6 @@
 # telegram_bot.py
 import os
+import requests # Make sure 'requests' is imported at the top
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackContext
@@ -8,10 +9,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 load_dotenv()
 
 # --- Import Custom Modules ---
-# Import our Dobby function AFTER loading the .env
 from dobby_client import get_dobby_response
-# Import our new researcher function
-from researcher import research_topic
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
@@ -42,11 +40,11 @@ QUANTITY_MARKUP = ReplyKeyboardMarkup(QUANTITY_KEYBOARD, resize_keyboard=True, o
 
 async def start(update: Update, context: CallbackContext) -> None:
     """Sends a welcome message and the main keyboard."""
-    context.user_data.clear()  # Clear any old conversation state
+    context.user_data.clear()
     welcome_text = (
         "Hi! I'm your AI Content Strategist, powered by Dobby.\n\n"
         "Tap '💡 Generate New Idea' or send me a topic to get started.\n\n"
-        "You can also use `/research [topic]` to get live info."
+        "You can also use `/trending` to get live market info."
     )
     await update.message.reply_text(welcome_text, reply_markup=MAIN_MARKUP)
 
@@ -55,7 +53,7 @@ async def help_command(update: Update, context: CallbackContext) -> None:
     help_text = (
         "Here's how to use me:\n\n"
         "1.  **Just send a topic:** I'll ask you for the tone and quantity.\n"
-        "2.  **/research [topic]**: Get a real-time summary about any topic.\n"
+        "2.  **/trending**: Get AI analysis on CoinGecko's top 7.\n"
         "3.  **/generatethread**: (Legacy) Starts the guided process.\n"
         "4.  **/myideas**: (Coming Soon) View your saved ideas.\n"
         "5.  **/about**: Learn about this bot.\n"
@@ -86,44 +84,44 @@ async def cancel(update: Update, context: CallbackContext) -> None:
         reply_markup=MAIN_MARKUP
     )
 
-async def research(update: Update, context: CallbackContext) -> None:
-    """Researches a topic, scrapes content, and summarzies it with Dobby."""
-    try:
-        topic = " ".join(context.args)
-        if not topic:
-            await update.message.reply_text(
-                "Please provide a topic. \nExample: `/research Kaito crypto project`"
-            )
-            return
-    except (IndexError, ValueError):
-        await update.message.reply_text("Please provide a topic.")
-        return
-
-    await update.message.reply_text(f"🔬 Researching '{topic}'... this might take a minute.")
-
-    # 1. Get the scraped text from your new researcher.py
-    scraped_text = research_topic(topic)
-
-    # 2. Check if scraping failed
-    if scraped_text.startswith("Sorry,"):
-        await update.message.reply_text(scraped_text, reply_markup=MAIN_MARKUP)
-        return
+# --- NEW COMMAND ---
+async def trending(update: Update, context: CallbackContext) -> None:
+    """Gets top 7 trending coins from CoinGecko and has Dobby analyze them."""
+    await update.message.reply_text("🔥 Getting CoinGecko's top 7 trending... one sec.")
     
-    # 3. Build the prompt for Dobby
-    final_prompt = (
-        "You are a research analyst. A user has provided you with raw, scraped text from a webpage. "
-        "Your job is to read the text and provide a concise, factual summary.\n\n"
-        f"**TOPIC:** {topic}\n\n"
-        "**SCRAPED TEXT:**\n"
-        f"\"\"\"\n{scraped_text}\n\"\"\"\n\n"
-        "**YOUR TASK:**\n"
-        "Based *only* on the text provided, write a clean, detailed summary of the topic. "
-        "Do not add any information not present in the text."
-    )
+    try:
+        # 1. Call the CoinGecko API
+        url = "https://api.coingecko.com/api/v3/search/trending"
+        response = requests.get(url)
+        response.raise_for_status()
+        
+        data = response.json()
+        trending_coins = data.get('coins', [])
+        
+        if not trending_coins:
+            await update.message.reply_text("Sorry, I couldn't fetch the trending list.")
+            return
 
-    # 4. Get the response from Dobby
-    response = get_dobby_response(final_prompt)
-    await update.message.reply_text(response, reply_markup=MAIN_MARKUP)
+        # 2. Create a clean list of coin names
+        coin_names = [coin['item']['name'] for coin in trending_coins]
+        coin_list = ", ".join(coin_names)
+
+        # 3. Build the Dobby prompt
+        final_prompt = (
+            "You are a 'Trader' tone AI. You are an expert at market analysis. "
+            "Based *only* on the fact that these are the **top 7 trending projects on CoinGecko**, "
+            "give me a brief, insightful market commentary. Why might these be trending?\n\n"
+            f"**Trending List:** {coin_list}\n\n"
+            "Keep it concise and actionable."
+        )
+
+        # 4. Get Dobby's analysis
+        analysis = get_dobby_response(final_prompt)
+        await update.message.reply_text(analysis, reply_markup=MAIN_MARKUP)
+
+    except requests.exceptions.RequestException as e:
+        print(f"CoinGecko API error: {e}")
+        await update.message.reply_text("Sorry, I had trouble connecting to the CoinGecko API.")
 
 # --- Conversation & Message Handler ---
 
@@ -132,7 +130,6 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     text = update.message.text
     state = context.user_data.get('state')
 
-    # --- 1. Handle Main Menu Buttons ---
     if not state:
         if text == "💡 Generate New Idea":
             await update.message.reply_text("Great! What's the topic?", reply_markup=ReplyKeyboardRemove())
@@ -145,13 +142,11 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             await about(update, context)
             return
         
-        # If no state and not a button, treat it as a new topic
         context.user_data['topic'] = text
         await update.message.reply_text("Got it. What tone should I use?", reply_markup=TONE_MARKUP)
         context.user_data['state'] = 'AWAITING_TONE'
         return
 
-    # --- 2. Handle Conversation States ---
     if state == 'AWAITING_TOPIC':
         context.user_data['topic'] = text
         await update.message.reply_text("Perfect. Now, what tone should I use?", reply_markup=TONE_MARKUP)
@@ -183,9 +178,6 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             reply_markup=MAIN_MARKUP
         )
         
-        # --- Build a smarter prompt ---
-        
-        # First, let's create better descriptions for each tone
         tone = context.user_data['tone']
         tone_description = ""
         if tone == "Shitposter":
@@ -199,7 +191,6 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         elif tone == "Trader":
             tone_description = "Action-oriented, concise, and focused on market impact, price action, and potential opportunities."
 
-        # Second, build the final prompt with new formatting rules
         final_prompt = (
             f"You are an expert content creator. A user wants you to generate {context.user_data['quantity']} "
             f"ready-to-post Twitter threads about the topic: '{context.user_data['topic']}'.\n\n"
@@ -213,11 +204,9 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             f"    - Include relevant hashtags at the end of some tweets."
         )
 
-        # Get the response from Dobby
         response = get_dobby_response(final_prompt)
         await update.message.reply_text(response, reply_markup=MAIN_MARKUP)
         
-        # Clear the state and end the conversation
         context.user_data.clear()
         return
 
@@ -238,12 +227,12 @@ def main() -> None:
     application.add_handler(CommandHandler("myideas", my_ideas))
     application.add_handler(CommandHandler("cancel", cancel))
     application.add_handler(CommandHandler("generatethread", handle_message))
-    application.add_handler(CommandHandler("research", research)) # <-- New command
+    application.add_handler(CommandHandler("trending", trending)) # <-- New command
     
     # Register the main message handler
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("Your AI Content Strategist (V4) is now online!")
+    print("Your AI Content Strategist (V4.1) is now online!")
     application.run_polling()
 
 if __name__ == '__main__':
