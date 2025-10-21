@@ -3,6 +3,7 @@ A Telegram bot built for the Sentient Builder Program that acts as an AI-powered
 
 This bot helps you overcome writer's block by generating structured and engaging X (formerly Twitter) thread ideas. By providing a simple topic, you'll receive multiple thread outlines, each complete with a powerful hook, key discussion points, and a question to drive engagement.
 
+
 ✨ Key Features
 Generate Structured Ideas: Get complete thread outlines, not just loose concepts.
 
