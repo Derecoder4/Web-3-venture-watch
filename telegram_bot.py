@@ -106,14 +106,17 @@ async def trending(update: Update, context: CallbackContext) -> None:
         coin_names = [coin['item']['name'] for coin in trending_coins]
         coin_list = ", ".join(coin_names)
 
-        # 3. Build the Dobby prompt
+        # 3. --- THIS IS THE NEW, SMARTER PROMPT ---
         final_prompt = (
-            "You are a 'Trader' tone AI. You are an expert at market analysis. "
-            "Based *only* on the fact that these are the **top 7 trending projects on CoinGecko**, "
-            "give me a brief, insightful market commentary. Why might these be trending?\n\n"
-            f"**Trending List:** {coin_list}\n\n"
-            "Keep it concise and actionable."
+            "You are a professional crypto market analyst, like someone from Bloomberg. "
+            "Your tone is insightful, concise, and 100% professional. **Do not use profanity.**\n\n"
+            "The top 7 trending projects on CoinGecko are:\n"
+            f"{coin_list}\n\n"
+            "**YOUR TASK:**\n"
+            "1.  **List each coin** with a brief, one-sentence analysis of *why* it might be trending (e.g., 'Bitcoin: Often trends as a market bellwether.').\n"
+            "2.  **After the list,** provide a 2-3 sentence market summary of what this overall list tells you about the current sentiment (e.g., 'The list shows a mix of...')."
         )
+        # --- END OF NEW PROMPT ---
 
         # 4. Get Dobby's analysis
         analysis = get_dobby_response(final_prompt)
