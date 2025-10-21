@@ -32,8 +32,8 @@ def research_topic(topic: str) -> str:
     """Searches a topic, scrapes the top result, and returns the content."""
     try:
         # --- THIS IS THE CORRECTED LINE ---
-        # I have removed the 'num=2' argument
-        urls = [url for url in search(topic, stop=2, pause=1)]
+        # The correct argument is 'num_results'
+        urls = [url for url in search(topic, num_results=2, pause=1)]
 
         if not urls:
             return "Sorry, I couldn't find any good search results for that topic."
