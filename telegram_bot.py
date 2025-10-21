@@ -7,8 +7,11 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 # Load the secret keys from the .env file FIRST
 load_dotenv()
 
+# --- Import Custom Modules ---
 # Import our Dobby function AFTER loading the .env
 from dobby_client import get_dobby_response
+# Import our new researcher function
+from researcher import research_topic
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
@@ -42,7 +45,8 @@ async def start(update: Update, context: CallbackContext) -> None:
     context.user_data.clear()  # Clear any old conversation state
     welcome_text = (
         "Hi! I'm your AI Content Strategist, powered by Dobby.\n\n"
-        "Tap '💡 Generate New Idea' or send me a topic to get started."
+        "Tap '💡 Generate New Idea' or send me a topic to get started.\n\n"
+        "You can also use `/research [topic]` to get live info."
     )
     await update.message.reply_text(welcome_text, reply_markup=MAIN_MARKUP)
 
@@ -50,8 +54,8 @@ async def help_command(update: Update, context: CallbackContext) -> None:
     """Sends a helpful message."""
     help_text = (
         "Here's how to use me:\n\n"
-        "1.  **Tap '💡 Generate New Idea'**: This starts the guided process.\n"
-        "2.  **Just send a topic:** I'll ask you for the tone and quantity.\n"
+        "1.  **Just send a topic:** I'll ask you for the tone and quantity.\n"
+        "2.  **/research [topic]**: Get a real-time summary about any topic.\n"
         "3.  **/generatethread**: (Legacy) Starts the guided process.\n"
         "4.  **/myideas**: (Coming Soon) View your saved ideas.\n"
         "5.  **/about**: Learn about this bot.\n"
@@ -82,9 +86,46 @@ async def cancel(update: Update, context: CallbackContext) -> None:
         reply_markup=MAIN_MARKUP
     )
 
+async def research(update: Update, context: CallbackContext) -> None:
+    """Researches a topic, scrapes content, and summarzies it with Dobby."""
+    try:
+        topic = " ".join(context.args)
+        if not topic:
+            await update.message.reply_text(
+                "Please provide a topic. \nExample: `/research Kaito crypto project`"
+            )
+            return
+    except (IndexError, ValueError):
+        await update.message.reply_text("Please provide a topic.")
+        return
 
+    await update.message.reply_text(f"🔬 Researching '{topic}'... this might take a minute.")
 
-        # --- Conversation & Message Handler ---
+    # 1. Get the scraped text from your new researcher.py
+    scraped_text = research_topic(topic)
+
+    # 2. Check if scraping failed
+    if scraped_text.startswith("Sorry,"):
+        await update.message.reply_text(scraped_text, reply_markup=MAIN_MARKUP)
+        return
+    
+    # 3. Build the prompt for Dobby
+    final_prompt = (
+        "You are a research analyst. A user has provided you with raw, scraped text from a webpage. "
+        "Your job is to read the text and provide a concise, factual summary.\n\n"
+        f"**TOPIC:** {topic}\n\n"
+        "**SCRAPED TEXT:**\n"
+        f"\"\"\"\n{scraped_text}\n\"\"\"\n\n"
+        "**YOUR TASK:**\n"
+        "Based *only* on the text provided, write a clean, detailed summary of the topic. "
+        "Do not add any information not present in the text."
+    )
+
+    # 4. Get the response from Dobby
+    response = get_dobby_response(final_prompt)
+    await update.message.reply_text(response, reply_markup=MAIN_MARKUP)
+
+# --- Conversation & Message Handler ---
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
     """Handles all text messages and routes them based on state."""
@@ -142,7 +183,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             reply_markup=MAIN_MARKUP
         )
         
-        # --- NEW: Build a smarter prompt ---
+        # --- Build a smarter prompt ---
         
         # First, let's create better descriptions for each tone
         tone = context.user_data['tone']
@@ -164,19 +205,17 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             f"ready-to-post Twitter threads about the topic: '{context.user_data['topic']}'.\n\n"
             f"**CRITICAL INSTRUCTIONS:**\n\n"
             f"1.  **TONE:** You MUST write in the following tone: **{tone_description}**\n\n"
-            
             f"2.  **CONTENT:** Do NOT use bullet points. Write out the full text of the thread(s) with deep insights, analysis, and opinions. Each tweet should be a full paragraph.\n\n"
-            
             f"3.  **FORMATTING (VERY IMPORTANT):**\n"
             f"    - Each thread must have 6-8 tweets.\n"
             f"    - **Separate each individual tweet (e.g., 1/8, 2/8) with a new line.** This is crucial for readability.\n"
             f"    - If generating more than one thread, separate them with a clear marker like '--- THREAD 2 ---'.\n"
+            f"    - Include relevant hashtags at the end of some tweets."
         )
-        # --- End of new prompt ---
 
         # Get the response from Dobby
         response = get_dobby_response(final_prompt)
-        await update.message.reply_text(response)
+        await update.message.reply_text(response, reply_markup=MAIN_MARKUP)
         
         # Clear the state and end the conversation
         context.user_data.clear()
@@ -198,13 +237,13 @@ def main() -> None:
     application.add_handler(CommandHandler("about", about))
     application.add_handler(CommandHandler("myideas", my_ideas))
     application.add_handler(CommandHandler("cancel", cancel))
-    # This /generatethread command will just trigger the conversation
     application.add_handler(CommandHandler("generatethread", handle_message))
+    application.add_handler(CommandHandler("research", research)) # <-- New command
     
     # Register the main message handler
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("Your AI Content Strategist (V3) is now online!")
+    print("Your AI Content Strategist (V4) is now online!")
     application.run_polling()
 
 if __name__ == '__main__':
