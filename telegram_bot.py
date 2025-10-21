@@ -1,8 +1,8 @@
 # telegram_bot.py
 import os
 from dotenv import load_dotenv
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackContext
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackContext
 
 # Load the secret keys from the .env file FIRST
 load_dotenv()
@@ -12,43 +12,156 @@ from dobby_client import get_dobby_response
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
+# --- Define Keyboards ---
+# Main menu
+MAIN_KEYBOARD = [
+    ["💡 Generate New Idea"],
+    ["📂 My Saved Ideas", "ℹ️ About"],
+]
+MAIN_MARKUP = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
+
+# Tone selection
+TONE_KEYBOARD = [
+    ["Shitposter", "Conversational"],
+    ["Philosophical", "Researcher", "Trader"],
+    ["/cancel"],
+]
+TONE_MARKUP = ReplyKeyboardMarkup(TONE_KEYBOARD, resize_keyboard=True, one_time_keyboard=True)
+
+# Quantity selection
+QUANTITY_KEYBOARD = [
+    ["1", "2", "3"],
+    ["/cancel"],
+]
+QUANTITY_MARKUP = ReplyKeyboardMarkup(QUANTITY_KEYBOARD, resize_keyboard=True, one_time_keyboard=True)
+
 # --- Command Handlers ---
+
 async def start(update: Update, context: CallbackContext) -> None:
-    """Sends a welcome message when the /start command is issued."""
+    """Sends a welcome message and the main keyboard."""
+    context.user_data.clear()  # Clear any old conversation state
     welcome_text = (
         "Hi! I'm your AI Content Strategist, powered by Dobby.\n\n"
-        "Give me a topic, and I'll generate X thread ideas for you.\n\n"
-        "Try this: `/thread_ideas stablecoins in Africa`"
+        "Tap '💡 Generate New Idea' or send me a topic to get started."
     )
-    await update.message.reply_text(welcome_text)
+    await update.message.reply_text(welcome_text, reply_markup=MAIN_MARKUP)
 
-async def generate_ideas(update: Update, context: CallbackContext) -> None:
-    """Generates X thread ideas based on a user's topic."""
-    try:
-        topic = " ".join(context.args)
-        if not topic:
-            await update.message.reply_text("Please provide a topic after the command. \nExample: `/thread_ideas Web3 gaming`")
+async def help_command(update: Update, context: CallbackContext) -> None:
+    """Sends a helpful message."""
+    help_text = (
+        "Here's how to use me:\n\n"
+        "1.  **Tap '💡 Generate New Idea'**: This starts the guided process.\n"
+        "2.  **Just send a topic:** I'll ask you for the tone and quantity.\n"
+        "3.  **/generatethread**: (Legacy) Starts the guided process.\n"
+        "4.  **/myideas**: (Coming Soon) View your saved ideas.\n"
+        "5.  **/about**: Learn about this bot.\n"
+        "6.  **/cancel**: Use this anytime to stop the idea generation process."
+    )
+    await update.message.reply_text(help_text, reply_markup=MAIN_MARKUP)
+
+async def about(update: Update, context: CallbackContext) -> None:
+    """Sends the 'About' message."""
+    about_text = (
+        "This is an AI bot built by @josh_ehh for the Sentient Builder Program.\n\n"
+        "It uses the **Dobby model** via the Fireworks AI API to help you brainstorm content ideas."
+    )
+    await update.message.reply_text(about_text, reply_markup=MAIN_MARKUP)
+
+async def my_ideas(update: Update, context: CallbackContext) -> None:
+    """Placeholder for the 'My Saved Ideas' feature."""
+    await update.message.reply_text(
+        "This feature is coming soon! This will allow you to save and view your best-generated ideas.",
+        reply_markup=MAIN_MARKUP
+    )
+
+async def cancel(update: Update, context: CallbackContext) -> None:
+    """Cancels the current conversation state."""
+    context.user_data.clear()
+    await update.message.reply_text(
+        "Process cancelled. What's next?",
+        reply_markup=MAIN_MARKUP
+    )
+
+# --- Conversation & Message Handler ---
+
+async def handle_message(update: Update, context: CallbackContext) -> None:
+    """Handles all text messages and routes them based on state."""
+    text = update.message.text
+    state = context.user_data.get('state')
+
+    # --- 1. Handle Main Menu Buttons ---
+    if not state:
+        if text == "💡 Generate New Idea":
+            await update.message.reply_text("Great! What's the topic?", reply_markup=ReplyKeyboardRemove())
+            context.user_data['state'] = 'AWAITING_TOPIC'
             return
-    except (IndexError, ValueError):
-        await update.message.reply_text("Please provide a topic. Example: `/thread_ideas Web3 gaming`")
+        elif text == "📂 My Saved Ideas":
+            await my_ideas(update, context)
+            return
+        elif text == "ℹ️ About":
+            await about(update, context)
+            return
+        
+        # If no state and not a button, treat it as a new topic
+        context.user_data['topic'] = text
+        await update.message.reply_text("Got it. What tone should I use?", reply_markup=TONE_MARKUP)
+        context.user_data['state'] = 'AWAITING_TONE'
         return
 
-    await update.message.reply_text(f"🤖 Brainstorming ideas for '{topic}'... this might take a moment.")
-    
-    final_prompt = (
-        "You are an expert X (Twitter) content strategist for a Web3 researcher. "
-        f"Generate 3 distinct and engaging thread ideas about the topic: '{topic}'.\n\n"
-        "For each idea, provide:\n"
-        "1. A powerful, scroll-stopping hook (1-2 sentences).\n"
-        "2. 3 to 4 bullet points that would be covered in the thread.\n"
-        "3. A concluding thought or question to drive engagement."
-    )
-    
-    response = get_dobby_response(final_prompt)
-    
-    await update.message.reply_text(response)
+    # --- 2. Handle Conversation States ---
+    if state == 'AWAITING_TOPIC':
+        context.user_data['topic'] = text
+        await update.message.reply_text("Perfect. Now, what tone should I use?", reply_markup=TONE_MARKUP)
+        context.user_data['state'] = 'AWAITING_TONE'
+        return
+
+    elif state == 'AWAITING_TONE':
+        # Check if the tone is one of the valid options
+        if text not in ["Shitposter", "Conversational", "Philosophical", "Researcher", "Trader"]:
+            await update.message.reply_text("Please select a valid tone from the keyboard.", reply_markup=TONE_MARKUP)
+            return
+        
+        context.user_data['tone'] = text
+        await update.message.reply_text("Nice. And how many threads should I generate (1-3)?", reply_markup=QUANTITY_MARKUP)
+        context.user_data['state'] = 'AWAITING_QUANTITY'
+        return
+        
+    elif state == 'AWAITING_QUANTITY':
+        try:
+            quantity = int(text)
+            if not 1 <= quantity <= 3:
+                raise ValueError
+        except ValueError:
+            await update.message.reply_text("Please select a valid quantity (1, 2, or 3).", reply_markup=QUANTITY_MARKUP)
+            return
+
+        context.user_data['quantity'] = quantity
+        await update.message.reply_text(
+            f"🤖 Got it. Generating {quantity} thread(s) about '{context.user_data['topic']}' in a '{context.user_data['tone']}' tone...",
+            reply_markup=MAIN_MARKUP # Return to main menu
+        )
+        
+        # --- Build the new, powerful prompt ---
+        final_prompt = (
+            f"You are an expert content creator. A user wants you to generate {context.user_data['quantity']} "
+            f"fully-formed, ready-to-post Twitter threads about the topic: '{context.user_data['topic']}'.\n\n"
+            f"**CRITICAL INSTRUCTIONS:**\n"
+            f"1.  **Tone:** You MUST write in a {context.user_data['tone']} tone.\n"
+            f"2.  **Format:** Do NOT use bullet points. Write out the full text of the thread(s) with deep insights.\n"
+            f"3.  **Structure:** Each thread should be a complete piece. If generating more than one, separate them with '--- THREAD 1 ---', '--- THREAD 2 ---', etc.\n"
+            f"4.  **Content:** Go beyond a simple outline. Provide actual analysis, opinions, or data as the tone dictates."
+        )
+
+        # Get the response from Dobby
+        response = get_dobby_response(final_prompt)
+        await update.message.reply_text(response)
+        
+        # Clear the state and end the conversation
+        context.user_data.clear()
+        return
 
 # --- Main Bot Setup ---
+
 def main() -> None:
     """Start the bot."""
     if not TELEGRAM_TOKEN:
@@ -56,10 +169,20 @@ def main() -> None:
         return
 
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+    # Register all command handlers
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("thread_ideas", generate_ideas))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("about", about))
+    application.add_handler(CommandHandler("myideas", my_ideas))
+    application.add_handler(CommandHandler("cancel", cancel))
+    # This /generatethread command will just trigger the conversation
+    application.add_handler(CommandHandler("generatethread", handle_message))
     
-    print("Your AI Content Strategist is now online!")
+    # Register the main message handler
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    print("Your AI Content Strategist (V3) is now online!")
     application.run_polling()
 
 if __name__ == '__main__':
