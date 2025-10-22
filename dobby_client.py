@@ -24,10 +24,9 @@ def get_dobby_response(prompt: str) -> str:
     data = {
         "model": "accounts/sentientfoundation/models/dobby-unhinged-llama-3-3-70b-new",
         "prompt": prompt,
-        "max_tokens": 512,  # Controls the length of the response
-        "temperature": 0.7, # Controls the creativity of the response
+        "max_tokens": 3072, # <-- MUCH HIGHER
+        "temperature": 0.7,
     }
-
     try:
         response = requests.post(API_URL, headers=headers, json=data)
         response.raise_for_status() 
