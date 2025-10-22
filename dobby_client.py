@@ -24,7 +24,7 @@ def get_dobby_response(prompt: str) -> str:
     data = {
         "model": "accounts/sentientfoundation/models/dobby-unhinged-llama-3-3-70b-new",
         "prompt": prompt,
-        "max_tokens": 3072, # <-- MUCH HIGHER
+        "max_tokens": 1500, # <-- MUCH HIGHER
         "temperature": 0.7,
     }
     try:
