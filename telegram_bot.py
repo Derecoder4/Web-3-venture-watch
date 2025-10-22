@@ -90,7 +90,6 @@ async def trending(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text("🔥 Getting CoinGecko's top 7 trending... one sec.")
     
     try:
-        # 1. Call the CoinGecko API
         url = "https://api.coingecko.com/api/v3/search/trending"
         response = requests.get(url)
         response.raise_for_status()
@@ -102,23 +101,25 @@ async def trending(update: Update, context: CallbackContext) -> None:
             await update.message.reply_text("Sorry, I couldn't fetch the trending list.")
             return
 
-        # 2. Create a clean list of coin names
         coin_names = [coin['item']['name'] for coin in trending_coins]
         coin_list = ", ".join(coin_names)
 
-        # 3. --- THIS IS THE NEW, SMARTER PROMPT ---
+        # --- NEW V5 PROMPT FOR /trending ---
         final_prompt = (
-            "You are a professional crypto market analyst, like someone from Bloomberg. "
-            "Your tone is insightful, concise, and 100% professional. **Do not use profanity.**\n\n"
-            "The top 7 trending projects on CoinGecko are:\n"
-            f"{coin_list}\n\n"
+            "You are a professional crypto market analyst. Your tone is insightful, professional, and concise, like a Bloomberg analyst. **You must not use any profanity.**\n\n"
+            f"The top 7 trending projects on CoinGecko are: {coin_list}\n\n"
             "**YOUR TASK:**\n"
-            "1.  **List each coin** with a brief, one-sentence analysis of *why* it might be trending (e.g., 'Bitcoin: Often trends as a market bellwether.').\n"
-            "2.  **After the list,** provide a 2-3 sentence market summary of what this overall list tells you about the current sentiment (e.g., 'The list shows a mix of...')."
+            "Create a formatted report. For each of the 7 projects, provide a 3-part analysis:\n"
+            "1.  **Analysis:** A brief, one-sentence insight on *why* it might be trending.\n"
+            "2.  **Sentiment:** (Bullish / Bearish / Neutral) based on the current narrative.\n"
+            "3.  **Actionable Insight:** A short takeaway for a trader (e.g., 'Watch for key levels', 'Narrative play, watch for hype cycle', 'Wait for a pullback').\n\n"
+            "**FORMATTING RULES (VERY IMPORTANT):**\n"
+            "- Use a relevant emoji and **bold the coin name** for each project.\n"
+            "- **Add a blank line between each coin's analysis** to fix the 'jampacked' text.\n"
+            "- After the list, add a 2-sentence summary of the overall market sentiment."
         )
         # --- END OF NEW PROMPT ---
 
-        # 4. Get Dobby's analysis
         analysis = get_dobby_response(final_prompt)
         await update.message.reply_text(analysis, reply_markup=MAIN_MARKUP)
 
@@ -183,18 +184,21 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         
         tone = context.user_data['tone']
         tone_description = ""
+        # --- NEW TONE DESCRIPTIONS ---
         if tone == "Shitposter":
-            tone_description = "Witty, edgy, provocative, and informal. Use strong, contrarian opinions. (Avoid constant, low-effort profanity; be clever)."
+            tone_description = "Witty, edgy, provocative, and informal. Use strong, contrarian opinions. (Profanity like 'fuck' or 'shit' is allowed for this tone ONLY)."
         elif tone == "Conversational":
-            tone_description = "Friendly, approachable, and easy to read, as if explaining to a friend."
+            tone_description = "Friendly, approachable, and easy to read. **Must be 100% professional and use zero profanity.**"
         elif tone == "Philosophical":
-            tone_description = "Deep, abstract, and thought-provoking. Focus on the 'why' and the bigger picture."
+            tone_description = "Deep, abstract, and thought-provoking. **Must use formal, academic language and zero profanity.**"
         elif tone == "Researcher":
-            tone_description = "Data-driven, objective, and analytical. Use formal language and cite concepts (hypothetically)."
+            tone_description = "Data-driven, objective, and analytical. **Must use formal, academic language and zero profanity.**"
         elif tone == "Trader":
-            tone_description = "Action-oriented, concise, and focused on market impact, price action, and potential opportunities."
+            tone_description = "Action-oriented, concise, and focused on market impact. **Must be 100% professional and use zero profanity.**"
 
+        # --- NEW PROMPT WITH GLOBAL RULE ---
         final_prompt = (
+            f"**GLOBAL RULE: You MUST NOT use any profanity (e.g., 'fuck', 'shit', 'bitch', 'ass') UNLESS the user's selected tone is 'Shitposter'.**\n\n"
             f"You are an expert content creator. A user wants you to generate {context.user_data['quantity']} "
             f"ready-to-post Twitter threads about the topic: '{context.user_data['topic']}'.\n\n"
             f"**CRITICAL INSTRUCTIONS:**\n\n"
