@@ -76,7 +76,7 @@ async def cancel(update: Update, context: CallbackContext) -> None:
         reply_markup=MAIN_MARKUP
     )
 
-# --- Trending Command (V7 Prompt) ---
+# --- Trending Command (V7 Prompt + Message Splitting) ---
 async def trending(update: Update, context: CallbackContext) -> None:
     """Gets top 7 trending coins from CoinGecko and has Dobby analyze them."""
     await update.message.reply_text("🔥 Getting CoinGecko's top 7 trending... one sec.")
@@ -120,14 +120,35 @@ async def trending(update: Update, context: CallbackContext) -> None:
         # --- END OF V7 PROMPT ---
 
         analysis = get_dobby_response(final_prompt)
-        await update.message.reply_text(analysis, reply_markup=MAIN_MARKUP)
+
+        # --- Code to handle long messages ---
+        MAX_MESSAGE_LENGTH = 4096
+        full_response = analysis # Use 'analysis' here
+
+        if len(full_response) <= MAX_MESSAGE_LENGTH:
+            await update.message.reply_text(full_response, reply_markup=MAIN_MARKUP)
+        else:
+            parts = []
+            while len(full_response) > 0:
+                split_point = full_response.rfind('\n', 0, MAX_MESSAGE_LENGTH)
+                if split_point == -1:
+                    split_point = MAX_MESSAGE_LENGTH
+                parts.append(full_response[:split_point])
+                full_response = full_response[split_point:].lstrip()
+            for i, part in enumerate(parts):
+                if i == len(parts) - 1:
+                    await update.message.reply_text(part, reply_markup=MAIN_MARKUP)
+                else:
+                    await update.message.reply_text(part)
+        # --- END: Code to handle long messages ---
+
 
     except requests.exceptions.RequestException as e:
         print(f"CoinGecko API error: {e}")
         await update.message.reply_text("Sorry, I had trouble connecting to the CoinGecko API.")
 
 
-# --- Conversation & Message Handler (V8 Prompt) ---
+# --- Conversation & Message Handler (V8 Prompt + Message Splitting) ---
 async def handle_message(update: Update, context: CallbackContext) -> None:
     """Handles all text messages and routes them based on state."""
     text = update.message.text
@@ -218,7 +239,27 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         # --- END OF V8 PROMPT ---
 
         response = get_dobby_response(final_prompt)
-        await update.message.reply_text(response, reply_markup=MAIN_MARKUP)
+
+        # --- Code to handle long messages ---
+        MAX_MESSAGE_LENGTH = 4096
+        full_response = response # Use 'response' here
+
+        if len(full_response) <= MAX_MESSAGE_LENGTH:
+            await update.message.reply_text(full_response, reply_markup=MAIN_MARKUP)
+        else:
+            parts = []
+            while len(full_response) > 0:
+                split_point = full_response.rfind('\n', 0, MAX_MESSAGE_LENGTH)
+                if split_point == -1:
+                    split_point = MAX_MESSAGE_LENGTH
+                parts.append(full_response[:split_point])
+                full_response = full_response[split_point:].lstrip()
+            for i, part in enumerate(parts):
+                if i == len(parts) - 1:
+                    await update.message.reply_text(part, reply_markup=MAIN_MARKUP)
+                else:
+                    await update.message.reply_text(part)
+        # --- END: Code to handle long messages ---
 
         context.user_data.clear()
         return
