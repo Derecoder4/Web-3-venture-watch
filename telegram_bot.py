@@ -47,7 +47,7 @@ async def start(update: Update, context: CallbackContext) -> None:
 async def help_command(update: Update, context: CallbackContext) -> None:
     help_text = (
         "Here's how to use me:\n\n"
-        "1.  **Just send a topic:** I'll ask for tone & quantity.\n"
+        "1.  **Just send a topic:** I'll ask for tone & quantity (or use your custom style).\n"
         "2.  **/trending**: Get AI analysis on CoinGecko's top 7.\n"
         "3.  **/setstyle [example]**: Teach me your writing style.\n"
         "4.  **/clearstyle**: Reset to default tones.\n"
@@ -108,7 +108,7 @@ async def clear_style(update: Update, context: CallbackContext) -> None:
             reply_markup=MAIN_MARKUP
         )
 
-# --- Trending Command (V7 Prompt + Stricter Rules) ---
+# --- Trending Command (V7 Prompt + Corrected Message Splitting) ---
 async def trending(update: Update, context: CallbackContext) -> None:
     """Gets top 7 trending coins from CoinGecko and has Dobby analyze them."""
     await update.message.reply_text("🔥 Getting CoinGecko's top 7 trending... one sec.")
@@ -141,7 +141,7 @@ async def trending(update: Update, context: CallbackContext) -> None:
             "* **Actionable Insight:** (1 short phrase for traders)\n\n"
             "**PART 2: OVERALL SUMMARY**\n"
             "After analyzing all 7 coins, provide a 2-sentence summary describing the overall market sentiment based on the list.\n\n"
-            "**FORMATTING RULES (FOLLOW EXACTLY):**\n"
+            "**FORMATTING RULES (VERY IMPORTANT - FOLLOW EXACTLY):**\n"
             "1.  Start the entire response with the heading: `### Trending Market Analysis`\n"
             "2.  For each coin in Part 1, use a relevant emoji and **bold the coin name** (e.g., '🚀 **Bitcoin**').\n"
             "3.  Use bullet points (`* `) for the 3 analysis points under each coin.\n"
@@ -167,11 +167,13 @@ async def trending(update: Update, context: CallbackContext) -> None:
                     split_point = MAX_MESSAGE_LENGTH
                 parts.append(full_response[:split_point])
                 full_response = full_response[split_point:].lstrip()
+
+            # --- CORRECTED LOOP ---
             for i, part in enumerate(parts):
-                if i == len(parts) - 1:
-                    await update.message.reply_text(part, reply_markup=MAIN_MARKUP)
-                else:
-                    await update.message.reply_text(part)
+                # Send keyboard ONLY on the very last part
+                reply_markup = MAIN_MARKUP if i == len(parts) - 1 else None
+                await update.message.reply_text(part, reply_markup=reply_markup)
+            # --- END CORRECTED LOOP ---
         # --- END: Code to handle long messages ---
 
 
@@ -180,7 +182,7 @@ async def trending(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text("Sorry, I had trouble connecting to the CoinGecko API.")
 
 
-# --- Conversation & Message Handler (V10 Prompt) ---
+# --- Conversation & Message Handler (V10 Prompt + Style Logic) ---
 async def handle_message(update: Update, context: CallbackContext) -> None:
     """Handles all text messages and routes them based on state."""
     text = update.message.text
@@ -199,20 +201,38 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             await about(update, context)
             return
 
-        # If no state and not a button, treat it as a new topic
+        # --- UPDATED: Check for style when receiving initial topic ---
         context.user_data['topic'] = text
-        await update.message.reply_text("Got it. What tone should I use?", reply_markup=TONE_MARKUP)
-        context.user_data['state'] = 'AWAITING_TONE'
+        custom_style = context.user_data.get('custom_style') # Check if style exists
+        if custom_style:
+            # If style exists, skip tone and go straight to quantity
+            await update.message.reply_text(f"Using your custom style for '{text}'. How many threads (1-3)?", reply_markup=QUANTITY_MARKUP)
+            context.user_data['state'] = 'AWAITING_QUANTITY'
+        else:
+            # If no style, ask for tone as usual
+            await update.message.reply_text("Got it. What tone should I use?", reply_markup=TONE_MARKUP)
+            context.user_data['state'] = 'AWAITING_TONE'
         return
+        # --- END UPDATE ---
 
     # --- 2. Handle Conversation States ---
     if state == 'AWAITING_TOPIC':
+        # --- UPDATED: Check for style after getting topic via button ---
         context.user_data['topic'] = text
-        await update.message.reply_text("Perfect. Now, what tone should I use?", reply_markup=TONE_MARKUP)
-        context.user_data['state'] = 'AWAITING_TONE'
+        custom_style = context.user_data.get('custom_style') # Check if style exists
+        if custom_style:
+            # If style exists, skip tone and go straight to quantity
+            await update.message.reply_text(f"Using your custom style for '{text}'. How many threads (1-3)?", reply_markup=QUANTITY_MARKUP)
+            context.user_data['state'] = 'AWAITING_QUANTITY'
+        else:
+            # If no style, ask for tone as usual
+            await update.message.reply_text("Perfect. Now, what tone should I use?", reply_markup=TONE_MARKUP)
+            context.user_data['state'] = 'AWAITING_TONE'
         return
+        # --- END UPDATE ---
 
     elif state == 'AWAITING_TONE':
+        # This state is now skipped if custom_style exists
         if text not in ["Shitposter", "Conversational", "Philosophical", "Researcher", "Trader"]:
             await update.message.reply_text("Please select a valid tone from the keyboard.", reply_markup=TONE_MARKUP)
             return
@@ -232,32 +252,34 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             return
 
         context.user_data['quantity'] = quantity
+        # Use tone in the confirmation message ONLY if custom_style is NOT set
+        tone_or_style = f"'{context.user_data.get('tone', 'default')}' tone"
+        if context.user_data.get('custom_style'):
+            tone_or_style = "your custom style"
+
         await update.message.reply_text(
-            f"🤖 Got it. Generating {quantity} complete thread(s) about '{context.user_data['topic']}' in a '{context.user_data['tone']}' tone...",
+            f"🤖 Got it. Generating {quantity} complete thread(s) about '{context.user_data['topic']}' using {tone_or_style}...",
             reply_markup=MAIN_MARKUP
         )
 
-        tone = context.user_data['tone']
+        # --- V10 Prompt Build Logic ---
+        tone = context.user_data.get('tone') # Use .get() in case it was skipped
         custom_style = context.user_data.get('custom_style')
 
-        # Determine the primary style instruction
         if custom_style:
             style_instruction = (
                 f"**STYLE GUIDE (MOST IMPORTANT):** You MUST mimic the writing style found in this example:\n"
                 f"\"\"\"\n{custom_style}\n\"\"\"\n\n"
                 f"Pay close attention to vocabulary, sentence structure, and overall voice."
             )
-            # When custom style is set, enforce professionalism unless the style itself is clearly informal/edgy
-            # (This is tricky, but we default to professional)
             profanity_rule = "**ULTRA-STRICT RULE: Your response MUST NOT contain any vulgar, profane, or offensive language (e.g., 'fuck', 'shit', 'bitch', 'ass', etc.) under ANY circumstances. The output must be 100% professional.**\n\n"
 
-        else:
-            # Use the selected tone description if no custom style
+        else: # No custom style, use selected tone
             tone_description = ""
             if tone == "Shitposter":
                 tone_description = "Witty, edgy, provocative, informal. Strong opinions. (Profanity like 'fuck' or 'shit' is allowed ONLY for this tone)."
-                # Relax the rule ONLY for Shitposter
                 profanity_rule = "**RULE: Profanity (e.g., 'fuck', 'shit') is allowed ONLY because the selected tone is 'Shitposter'.**\n\n"
+            # (Keep the elif blocks for Conversational, Philosophical, Researcher, Trader as before, ensuring they set the ULTRA-STRICT profanity_rule)
             elif tone == "Conversational":
                 tone_description = "Friendly, approachable, easy to read. **Absolutely NO profanity.**"
                 profanity_rule = "**ULTRA-STRICT RULE: Your response MUST NOT contain ANY vulgarity or profanity. Absolutely none.**\n\n"
@@ -274,21 +296,20 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             style_instruction = f"**TONE:** Write STRICTLY in this tone: **{tone_description}**"
 
 
-        # --- V10 PROMPT FOR THREAD GENERATION ---
         final_prompt = (
-            f"{profanity_rule}" # Apply the correct profanity rule based on tone/style
+            f"{profanity_rule}"
             "**IMPERATIVE RULE 2: COMPLETENESS:** You MUST generate the EXACT number of threads requested ({context.user_data['quantity']}). Ensure each thread is fully written and does not cut off mid-sentence.\n\n"
             f"You are an expert content creator. Generate {context.user_data['quantity']} "
             f"ready-to-post Twitter threads about the topic: '{context.user_data['topic']}'.\n\n"
             f"**INSTRUCTIONS:**\n\n"
-            f"1.  {style_instruction}\n\n" # Use the style_instruction variable here
+            f"1.  {style_instruction}\n\n"
             f"2.  **CONTENT:** Write full paragraphs for each tweet with deep insights. Do NOT use bullet points.\n\n"
             f"3.  **FORMATTING (FOLLOW EXACTLY):**\n"
             f"    - Each thread MUST have 6-8 tweets.\n"
             f"    - Separate each tweet (e.g., 1/8) with ONE new line.\n"
             f"    - If generating >1 thread, separate them with '--- THREAD 2 ---', etc.\n"
             f"    - Include relevant hashtags (#example) at the end of some tweets.\n\n"
-            f"**FINAL CHECK:** Re-read your response to ensure NO forbidden profanity is present (unless 'Shitposter' tone was selected) and that the correct number of complete threads were generated."
+            f"**FINAL CHECK:** Re-read your response to ensure NO forbidden profanity is present (unless 'Shitposter' tone was selected OR the custom style clearly implies it - default to NO profanity for custom styles) and that the correct number of complete threads were generated."
         )
         # --- END OF V10 PROMPT ---
 
@@ -308,11 +329,13 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                     split_point = MAX_MESSAGE_LENGTH
                 parts.append(full_response[:split_point])
                 full_response = full_response[split_point:].lstrip()
+
+            # --- CORRECTED LOOP ---
             for i, part in enumerate(parts):
-                if i == len(parts) - 1:
-                    await update.message.reply_text(part, reply_markup=MAIN_MARKUP)
-                else:
-                    await update.message.reply_text(part)
+                # Send keyboard ONLY on the very last part
+                reply_markup = MAIN_MARKUP if i == len(parts) - 1 else None
+                await update.message.reply_text(part, reply_markup=reply_markup)
+            # --- END CORRECTED LOOP ---
         # --- END: Code to handle long messages ---
 
         context.user_data.clear()
@@ -341,7 +364,7 @@ def main() -> None:
     # Register the main message handler
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("Your AI Content Strategist (V10) is now online!")
+    print("Your AI Content Strategist (V11) is now online!")
     application.run_polling()
 
 if __name__ == '__main__':
