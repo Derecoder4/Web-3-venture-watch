@@ -213,9 +213,9 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                 profanity_rule = "**ULTRA-STRICT RULE: Your response MUST NOT contain ANY vulgarity or profanity. Absolutely none.**\n\n"
             style_instruction = f"**TONE:** Write STRICTLY in this tone: **{tone_description}**"
 
-        # --- V15 PROMPT --- (Remains the same)
+      # --- V16 PROMPT ---
         final_prompt = (
-            f"{profanity_rule}"
+            f"{profanity_rule}" # Apply profanity rule first
             f"**TASK DEFINITION:**\n"
             f"- **Topic:** '{topic}'\n"
             f"- **Quantity:** You MUST generate EXACTLY {quantity} thread(s). NO MORE, NO LESS.\n\n"
@@ -226,16 +226,18 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             f"4.  **Completeness:** Ensure each tweet and thread is fully written.\n\n"
             f"**INSTRUCTIONS:**\n"
             f"You are an AI generating Twitter threads.\n"
-            f"1.  {style_instruction}\n"
+            f"1.  {style_instruction}\n" # Tone or Style
             f"2.  **CONTENT:** Write insightful paragraphs for each tweet. No bullet points.\n"
-            f"3.  **FORMATTING (MUST FOLLOW EXACTLY):**\n"
+            f"3.  **FORMATTING (MUST FOLLOW EXACTLY - CRITICAL FOR READABILITY):**\n"
             f"    - Start each tweet with 'X/8: ' (e.g., '1/8: ', '2/8: ', ... '8/8: ').\n"
-            f"    - Separate each tweet with ONE new line.\n"
+            f"    - **Separate each tweet with TWO new lines (`\\n\\n`).** This creates a visible paragraph break. Example:\n" # Specify TWO newlines
+            f"      1/8: [Text of first tweet]\n\n" # Explicit example
+            f"      2/8: [Text of second tweet]\n\n" # Explicit example
             f"    - If generating >1 thread (and ONLY if requested quantity > 1), separate them with '--- THREAD 2 ---', '--- THREAD 3 ---'.\n"
             f"    - Include relevant hashtags (#example) at the end of some tweets.\n\n"
-            f"**FINAL CHECK:** Ensure ZERO forbidden profanity (unless 'Shitposter'). Ensure EXACT quantity ({quantity}). Ensure EXACT length (8 tweets). Ensure correct formatting. Ensure ABSOLUTELY NO TEXT exists outside the requested thread(s)."
+            f"**FINAL CHECK:** Ensure ZERO forbidden profanity (unless 'Shitposter'). Ensure EXACT quantity ({quantity}). Ensure EXACT length (8 tweets). Ensure correct **DOUBLE newline** formatting between tweets. Ensure ABSOLUTELY NO TEXT exists outside the requested thread(s)."
         )
-        # --- END OF V15 PROMPT ---
+        # --- END OF V16 PROMPT ---
 
         # --- Call API using the DEFAULT max_tokens (1024) ---
         response = get_dobby_response(final_prompt) # No max_tokens argument needed here
