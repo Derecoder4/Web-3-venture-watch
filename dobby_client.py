@@ -2,13 +2,11 @@
 import os
 import requests
 
-# This is the correct API provider and endpoint
+# Make sure this is the correct API provider and endpoint
 API_URL = "https://api.fireworks.ai/inference/v1/completions"
 
-# dobby_client.py
-# ... (imports and API_URL remain the same) ...
-
-def get_dobby_response(prompt: str, max_tokens: int = 1024) -> str: # Add max_tokens argument with default
+# Default max_tokens is now 1024
+def get_dobby_response(prompt: str, max_tokens: int = 1024) -> str:
     """
     Sends a prompt to the Dobby model via the Fireworks AI API.
     """
@@ -26,7 +24,7 @@ def get_dobby_response(prompt: str, max_tokens: int = 1024) -> str: # Add max_to
     data = {
         "model": "accounts/sentientfoundation/models/dobby-unhinged-llama-3-3-70b-new",
         "prompt": prompt,
-        "max_tokens": max_tokens, # Use the passed-in value
+        "max_tokens": max_tokens, # Use the passed-in value or default (1024)
         "temperature": 0.7,
     }
 
@@ -35,7 +33,6 @@ def get_dobby_response(prompt: str, max_tokens: int = 1024) -> str: # Add max_to
         response.raise_for_status()
 
         response_data = response.json()
-        # Check if choices exist and have text
         choices = response_data.get('choices')
         if choices and len(choices) > 0 and 'text' in choices[0]:
              return choices[0]['text'].strip()
@@ -45,15 +42,14 @@ def get_dobby_response(prompt: str, max_tokens: int = 1024) -> str: # Add max_to
 
     except requests.exceptions.HTTPError as e:
         print(f"SERVER ERROR: {e.response.status_code} - {e.response.text}")
-        # Try to parse the error detail if it's JSON
         try:
             error_detail = e.response.json().get('detail', e.response.text)
-        except ValueError: # If response is not JSON
+        except ValueError:
             error_detail = e.response.text
         return f"Sorry, the server responded with an error: {error_detail}"
     except requests.exceptions.RequestException as e:
         print(f"CONNECTION ERROR: {e}")
         return "Sorry, I had trouble connecting to the Fireworks AI API."
-    except Exception as e: # Catch potential JSON parsing errors too
+    except Exception as e:
         print(f"Error parsing response or other exception: {e}")
         return "Sorry, an unexpected error occurred while processing the AI response."
