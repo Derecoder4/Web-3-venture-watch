@@ -76,7 +76,7 @@ async def help_command(update: Update, context: CallbackContext) -> None:
 
 async def about(update: Update, context: CallbackContext) -> None:
     about_text = (
-        "This is an AI bot built by @josh_ehh for the Sentient Builder Program.\n\n"
+        "This is an AI bot built by @joshehh for the Sentient Builder Program.\n\n"
         "It uses the **Dobby model** via the Fireworks AI API to help you brainstorm content ideas."
     )
     await send_message(update, context, about_text, reply_markup=MAIN_MARKUP)
@@ -124,13 +124,14 @@ async def clear_style(update: Update, context: CallbackContext) -> None:
         )
 
 
-# --- Conversation & Message Handler (V12 Prompt + Style Logic) ---
+# --- Conversation & Message Handler (V13 Prompt + Dynamic Tokens) ---
 async def handle_message(update: Update, context: CallbackContext) -> None:
     text = update.message.text
     state = context.user_data.get('state')
 
-    # --- 1. Handle Main Menu Buttons ---
+    # --- (Logic for main menu buttons and states AWAITING_TOPIC, AWAITING_TONE remains the same) ---
     if not state:
+        # ... (same as V11) ...
         if text == "💡 Generate New Idea":
             await send_message(update, context, "Great! What's the topic?", reply_markup=ReplyKeyboardRemove())
             context.user_data['state'] = 'AWAITING_TOPIC'
@@ -142,7 +143,6 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             await about(update, context)
             return
 
-        # Check for style when receiving initial topic
         context.user_data['topic'] = text
         custom_style = context.user_data.get('custom_style')
         if custom_style:
@@ -153,9 +153,8 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             context.user_data['state'] = 'AWAITING_TONE'
         return
 
-    # --- 2. Handle Conversation States ---
     if state == 'AWAITING_TOPIC':
-        # Check for style after getting topic via button
+        # ... (same as V11) ...
         context.user_data['topic'] = text
         custom_style = context.user_data.get('custom_style')
         if custom_style:
@@ -167,6 +166,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         return
 
     elif state == 'AWAITING_TONE':
+        # ... (same as V11) ...
         if text not in ["Shitposter", "Conversational", "Philosophical", "Researcher", "Trader"]:
             await send_message(update, context, "Please select a valid tone from the keyboard.", reply_markup=TONE_MARKUP)
             return
@@ -184,26 +184,32 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             return
 
         context.user_data['quantity'] = quantity
-        tone_or_style = f"'{context.user_data.get('tone', 'default')}' tone"
-        if context.user_data.get('custom_style'):
-            tone_or_style = "your custom style"
-        # Use simpler reply_text for this intermediate message
-        await update.message.reply_text(
-            f"🤖 Got it. Generating {quantity} complete thread(s) about '{context.user_data['topic']}' using {tone_or_style}...",
-            reply_markup=MAIN_MARKUP
-        )
-
+        topic = context.user_data['topic'] # Get topic
         tone = context.user_data.get('tone')
         custom_style = context.user_data.get('custom_style')
 
+        tone_or_style_desc = f"'{tone}' tone" if tone else "your custom style"
+        await update.message.reply_text( # Keep simple reply_text here
+            f"🤖 Okay, generating {quantity} thread(s) about '{topic}' using {tone_or_style_desc}. Please wait...",
+            reply_markup=MAIN_MARKUP
+        )
+
+        # --- Calculate Dynamic Max Tokens ---
+        # Base tokens + extra per thread (adjust these numbers if needed)
+        max_tokens_value = 1024 + (quantity - 1) * 768
+        # Ensure it doesn't exceed a reasonable max (e.g., 3072 was too slow)
+        max_tokens_value = min(max_tokens_value, 2560)
+
+        # --- V13 Prompt Build Logic ---
         if custom_style:
             style_instruction = f"**STYLE GUIDE:** Mimic this style:\n\"\"\"\n{custom_style}\n\"\"\"\n"
             profanity_rule = "**ULTRA-STRICT RULE: Your response MUST NOT contain ANY vulgarity or profanity. Absolutely none.**\n\n"
-        else:
+        else: # No custom style
             tone_description = ""
             if tone == "Shitposter":
                 tone_description = "Witty, edgy, provocative, informal. Strong opinions. (Profanity allowed ONLY for this tone)."
                 profanity_rule = "**RULE: Profanity is allowed ONLY because the selected tone is 'Shitposter'.**\n\n"
+            # (Keep elif blocks for other tones, ensuring they set the ULTRA-STRICT profanity_rule)
             elif tone == "Conversational":
                 tone_description = "Friendly, approachable, easy to read. **Absolutely NO profanity.**"
                 profanity_rule = "**ULTRA-STRICT RULE: Your response MUST NOT contain ANY vulgarity or profanity. Absolutely none.**\n\n"
@@ -216,33 +222,45 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             elif tone == "Trader":
                 tone_description = "Action-oriented, concise, market-focused. **Professional tone. Absolutely NO profanity.**"
                 profanity_rule = "**ULTRA-STRICT RULE: Your response MUST NOT contain ANY vulgarity or profanity. Absolutely none.**\n\n"
+
             style_instruction = f"**TONE:** Write STRICTLY in this tone: **{tone_description}**"
 
-        # --- V12 PROMPT FOR THREAD GENERATION ---
+        # --- V13 PROMPT ---
         final_prompt = (
-            f"{profanity_rule}"
-            "**IMPERATIVE RULE 2: COMPLETENESS:** Generate the EXACT number of threads requested ({context.user_data['quantity']}). Ensure each thread is fully written and does not cut off.\n\n"
-            f"You are an expert content creator. Generate {context.user_data['quantity']} "
-            f"ready-to-post Twitter threads about the topic: '{context.user_data['topic']}'.\n\n"
+            f"{profanity_rule}" # Apply profanity rule first
+            f"**TASK DEFINITION:**\n"
+            f"- **Topic:** '{topic}'\n"
+            f"- **Quantity:** Exactly {quantity} thread(s).\n\n"
+            f"**IMPERATIVE RULES:**\n"
+            f"1.  **Focus:** Generate content ONLY about the specified Topic ('{topic}'). Do NOT generate threads about general crypto or decentralization unless that *is* the topic.\n"
+            f"2.  **Quantity:** Generate EXACTLY {quantity} thread(s). No more, no less.\n"
+            f"3.  **Completeness:** Ensure each thread is fully written (6-8 tweets) and does not cut off.\n"
+            f"4.  **No Extra Text:** Output ONLY the requested thread text. Do NOT add any notes, commentary, titles (unless part of the first tweet), or review markers.\n\n"
             f"**INSTRUCTIONS:**\n"
-            f"1.  {style_instruction}\n"
-            f"2.  **CONTENT:** Write full paragraphs for each tweet with deep insights. Do NOT use bullet points.\n"
+            f"You are an expert content creator generating ready-to-post Twitter threads.\n"
+            f"1.  {style_instruction}\n" # Tone or Style
+            f"2.  **CONTENT:** Write insightful paragraphs for each tweet. No bullet points.\n"
             f"3.  **FORMATTING (MUST FOLLOW EXACTLY):**\n"
             f"    - Each thread MUST have 6-8 tweets.\n"
-            f"    - Separate each tweet (e.g., 1/8) with ONE new line.\n"
+            f"    - **Separate each tweet (e.g., 1/8) with ONE new line.** Example:\n"
+            f"      1/8: [Text of first tweet]\n" # Explicit example added
+            f"      2/8: [Text of second tweet]\n" # Explicit example added
             f"    - If generating >1 thread, separate them with '--- THREAD 2 ---', etc.\n"
             f"    - Include relevant hashtags (#example) at the end of some tweets.\n\n"
-            f"**FINAL CHECK:** Re-read response. Ensure ZERO forbidden profanity (unless 'Shitposter' tone). Ensure correct quantity ({context.user_data['quantity']}) and completeness."
+            f"**FINAL CHECK:** Ensure ZERO forbidden profanity (unless 'Shitposter'). Ensure EXACT quantity ({quantity}) and topic ('{topic}'). Ensure correct newline formatting between tweets. Ensure NO extra text outside the threads."
         )
-        # --- END OF V12 PROMPT ---
+        # --- END OF V13 PROMPT ---
 
-        response = get_dobby_response(final_prompt)
-        # Use the new send_message function to handle potential splitting
+        # Call API with dynamic max_tokens
+        response = get_dobby_response(final_prompt, max_tokens=max_tokens_value)
+
+        # Use the send_message function to handle potential splitting
         await send_message(update, context, response, reply_markup=MAIN_MARKUP)
 
         context.user_data.clear()
         return
 
+# --- (Rest of the file: main(), start(), help(), etc. remain the same as V11/V12) ---
 # --- Main Bot Setup ---
 def main() -> None:
     if not TELEGRAM_TOKEN:
@@ -251,19 +269,19 @@ def main() -> None:
 
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    # Register handlers (Removed /trending)
+    # Register handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("about", about))
     application.add_handler(CommandHandler("myideas", my_ideas))
     application.add_handler(CommandHandler("cancel", cancel))
     application.add_handler(CommandHandler("generatethread", handle_message))
-    # application.add_handler(CommandHandler("trending", trending)) # <-- REMOVED
+    # application.add_handler(CommandHandler("trending", trending)) # REMOVED
     application.add_handler(CommandHandler("setstyle", set_style))
     application.add_handler(CommandHandler("clearstyle", clear_style))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("Your AI Content Strategist (V13 - Focused) is now online!")
+    print("Your AI Content Strategist (V13) is now online!")
     application.run_polling()
 
 if __name__ == '__main__':
