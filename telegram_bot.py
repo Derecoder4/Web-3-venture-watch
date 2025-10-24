@@ -1,4 +1,4 @@
-# telegram_bot.py
+# telegram_bot.py (V13.1 - Refiner Focus)
 import os
 import requests
 from dotenv import load_dotenv
@@ -14,12 +14,15 @@ from dobby_client import get_dobby_response
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 # --- Define Keyboards ---
+# --- UPDATED MAIN KEYBOARD ---
 MAIN_KEYBOARD = [
-    ["💡 Generate New Idea"],
-    ["📂 My Saved Ideas", "ℹ️ About"],
+    ["✍️ Refine Draft", "🎨 Set Style"],
+    ["❓ Help", "ℹ️ About"],
 ]
 MAIN_MARKUP = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
+# --- END UPDATE ---
 
+# (Tone and Quantity keyboards are no longer needed for refinement flow, but keep for now if setstyle uses tones)
 TONE_KEYBOARD = [
     ["Shitposter", "Conversational"],
     ["Philosophical", "Researcher", "Trader"],
@@ -33,16 +36,23 @@ QUANTITY_KEYBOARD = [
 ]
 QUANTITY_MARKUP = ReplyKeyboardMarkup(QUANTITY_KEYBOARD, resize_keyboard=True, one_time_keyboard=True)
 
-# --- Utility Function for Sending Messages (Handles Splitting) ---
+# Refinement options keyboard
+REFINE_OPTIONS_KEYBOARD = [
+    ["Make it Punchier 🥊", "Improve Clarity ✨"],
+    ["Add Engagement Question❓", "Match My Style 🎨"],
+    ["Suggest Hashtags #️⃣"],
+    ["/cancel"],
+]
+REFINE_OPTIONS_MARKUP = ReplyKeyboardMarkup(REFINE_OPTIONS_KEYBOARD, resize_keyboard=True, one_time_keyboard=True)
+
+
+# --- Utility Function for Sending Messages ---
 async def send_message(update: Update, context: CallbackContext, text: str, reply_markup=None):
-    """Sends a message, splitting it if it exceeds Telegram's limit."""
     MAX_MESSAGE_LENGTH = 4096
     if len(text) <= MAX_MESSAGE_LENGTH:
         await update.message.reply_text(text, reply_markup=reply_markup)
     else:
-        parts = []
-        for i in range(0, len(text), MAX_MESSAGE_LENGTH):
-            parts.append(text[i : i + MAX_MESSAGE_LENGTH])
+        parts = [text[i : i + MAX_MESSAGE_LENGTH] for i in range(0, len(text), MAX_MESSAGE_LENGTH)]
         for i, part in enumerate(parts):
             final_markup = reply_markup if i == len(parts) - 1 else None
             await update.message.reply_text(part, reply_markup=final_markup)
@@ -52,56 +62,54 @@ async def send_message(update: Update, context: CallbackContext, text: str, repl
 async def start(update: Update, context: CallbackContext) -> None:
     context.user_data.clear()
     welcome_text = (
-        "Hi! I'm your AI Content Strategist, powered by Dobby.\n\n"
-        "Tap '💡 Generate New Idea' or send me a topic to get started.\n\n"
-        "Use `/setstyle` to teach me your voice."
+        "Hi! I'm your AI Content Assistant, powered by Dobby.\n\n"
+        "Paste your draft tweet or tap '✍️ Refine Draft' to get started.\n\n"
+        "Use `/setstyle` or '🎨 Set Style' to teach me your voice."
     )
     await send_message(update, context, welcome_text, reply_markup=MAIN_MARKUP)
 
 async def help_command(update: Update, context: CallbackContext) -> None:
+    # Updated help text for Refiner
     help_text = (
         "Here's how to use me:\n\n"
-        "1.  **Just send a topic:** I'll ask for tone & quantity (or use your custom style).\n"
-        "2.  **/setstyle [example]**: Teach me your writing style.\n"
-        "3.  **/clearstyle**: Reset to default tones.\n"
-        "4.  **/myideas**: (Coming Soon) View saved ideas.\n"
+        "1.  **Paste your draft tweet:** I'll ask how you want to refine it.\n"
+        "2.  **Tap '✍️ Refine Draft'**: I'll prompt you for the text.\n"
+        "3.  **/setstyle [example]** or **'🎨 Set Style'**: Teach me your writing style.\n"
+        "4.  **/clearstyle**: Reset to default style.\n"
         "5.  **/about**: Learn about this bot.\n"
-        "6.  **/cancel**: Stop the current action.\n"
-        "7.  **/generatethread**: (Legacy) Starts the guided process."
+        "6.  **/cancel**: Stop the current refinement."
     )
     await send_message(update, context, help_text, reply_markup=MAIN_MARKUP)
 
 async def about(update: Update, context: CallbackContext) -> None:
     about_text = (
-        "This is an AI bot built by @josh_ehh for the Sentient Builder Program.\n\n"
-        "It uses the **Dobby model** via the Fireworks AI API to help you brainstorm content ideas."
+        "This is an AI Content Assistant bot by @joshehh for the Sentient Builder Program.\n\n"
+        "It uses the **Dobby model** via Fireworks AI to help refine your X/Twitter content."
     )
     await send_message(update, context, about_text, reply_markup=MAIN_MARKUP)
 
-async def my_ideas(update: Update, context: CallbackContext) -> None:
-    await send_message(update, context,
-        "This feature is coming soon! This will allow you to save and view your best-generated ideas.",
-        reply_markup=MAIN_MARKUP
-    )
+# (my_ideas command is removed as it's not relevant to refiner)
 
 async def cancel(update: Update, context: CallbackContext) -> None:
     context.user_data.clear()
     await send_message(update, context,
-        "Process cancelled. What's next?",
+        "Process cancelled. Paste a new draft or use the menu.",
         reply_markup=MAIN_MARKUP
     )
 
-async def set_style(update: Update, context: CallbackContext) -> None:
+async def set_style_command(update: Update, context: CallbackContext) -> None: # Renamed slightly
+    """Handles the /setstyle command."""
     style_example = " ".join(context.args)
     if not style_example or len(style_example) < 10:
         await send_message(update, context,
-            "Please provide a good example text after the command.\n"
+            "Please provide example text after the command.\n"
             "Example: `/setstyle Your example tweet text here...`"
         )
         return
+
     context.user_data['custom_style'] = style_example
     await send_message(update, context,
-        "✅ Style saved! I'll try to mimic this style in future thread generations.\n"
+        "✅ Style saved! Use the 'Match My Style' option during refinement.\n"
         "Use /clearstyle to remove it.",
         reply_markup=MAIN_MARKUP
     )
@@ -110,7 +118,7 @@ async def clear_style(update: Update, context: CallbackContext) -> None:
     if 'custom_style' in context.user_data:
         del context.user_data['custom_style']
         await send_message(update, context,
-            "🗑️ Custom style cleared. I'll use the default tones now.",
+            "🗑️ Custom style cleared.",
             reply_markup=MAIN_MARKUP
         )
     else:
@@ -119,136 +127,106 @@ async def clear_style(update: Update, context: CallbackContext) -> None:
             reply_markup=MAIN_MARKUP
         )
 
-# --- Conversation & Message Handler ---
+# --- Refinement Conversation Logic ---
+
+# Define states for the conversation
+STATE_WAITING_DRAFT = 1
+STATE_WAITING_REFINEMENT_CHOICE = 2
+
+async def refine_command(update: Update, context: CallbackContext) -> None:
+    """Starts the refinement process via command."""
+    await send_message(update, context, "Okay, please send me the draft text you want to refine.", reply_markup=ReplyKeyboardRemove())
+    context.user_data['state'] = STATE_WAITING_DRAFT
+
+# --- Main Message Handler ---
 async def handle_message(update: Update, context: CallbackContext) -> None:
     text = update.message.text
     state = context.user_data.get('state')
 
-    # --- (Logic for main menu buttons and states AWAITING_TOPIC, AWAITING_TONE remains the same) ---
+    # --- 1. Handle Main Menu Buttons / Initial Input ---
     if not state:
-        # ... (same as previous version) ...
-        if text == "💡 Generate New Idea":
-            await send_message(update, context, "Great! What's the topic?", reply_markup=ReplyKeyboardRemove())
-            context.user_data['state'] = 'AWAITING_TOPIC'
+        # --- UPDATED BUTTON CHECKS ---
+        if text == "✍️ Refine Draft":
+            await refine_command(update, context) # Use the command function
             return
-        elif text == "📂 My Saved Ideas":
-            await my_ideas(update, context)
+        elif text == "🎨 Set Style":
+            await send_message(update, context, "Please send your style example using the command:\n`/setstyle [your example text]`", reply_markup=MAIN_MARKUP)
+            return
+        elif text == "❓ Help":
+            await help_command(update, context)
             return
         elif text == "ℹ️ About":
             await about(update, context)
             return
+        # --- END UPDATE ---
 
-        context.user_data['topic'] = text
-        custom_style = context.user_data.get('custom_style')
-        if custom_style:
-            await send_message(update, context, f"Using your custom style for '{text}'. How many threads (1-3)?", reply_markup=QUANTITY_MARKUP)
-            context.user_data['state'] = 'AWAITING_QUANTITY'
-        else:
-            await send_message(update, context, "Got it. What tone should I use?", reply_markup=TONE_MARKUP)
-            context.user_data['state'] = 'AWAITING_TONE'
+        # If no state and not a button, treat it as a draft to refine
+        context.user_data['draft_text'] = text
+        await send_message(update, context, "Got the draft. How should I refine it?", reply_markup=REFINE_OPTIONS_MARKUP)
+        context.user_data['state'] = STATE_WAITING_REFINEMENT_CHOICE
         return
 
-    if state == 'AWAITING_TOPIC':
-        # ... (same as previous version) ...
-        context.user_data['topic'] = text
-        custom_style = context.user_data.get('custom_style')
-        if custom_style:
-            await send_message(update, context, f"Using your custom style for '{text}'. How many threads (1-3)?", reply_markup=QUANTITY_MARKUP)
-            context.user_data['state'] = 'AWAITING_QUANTITY'
-        else:
-            await send_message(update, context, "Perfect. Now, what tone should I use?", reply_markup=TONE_MARKUP)
-            context.user_data['state'] = 'AWAITING_TONE'
+    # --- 2. Handle Conversation States ---
+    if state == STATE_WAITING_DRAFT:
+        context.user_data['draft_text'] = text
+        await send_message(update, context, "Okay, got the draft. How should I refine it?", reply_markup=REFINE_OPTIONS_MARKUP)
+        context.user_data['state'] = STATE_WAITING_REFINEMENT_CHOICE
         return
 
-    elif state == 'AWAITING_TONE':
-        # ... (same as previous version) ...
-        if text not in ["Shitposter", "Conversational", "Philosophical", "Researcher", "Trader"]:
-            await send_message(update, context, "Please select a valid tone from the keyboard.", reply_markup=TONE_MARKUP)
-            return
-        context.user_data['tone'] = text
-        await send_message(update, context, "Nice. And how many threads should I generate (1-3)?", reply_markup=QUANTITY_MARKUP)
-        context.user_data['state'] = 'AWAITING_QUANTITY'
-        return
+    elif state == STATE_WAITING_REFINEMENT_CHOICE:
+        refinement_choice = text
+        draft_text = context.user_data.get('draft_text')
 
-    elif state == 'AWAITING_QUANTITY':
-        try:
-            quantity = int(text)
-            if not 1 <= quantity <= 3: raise ValueError
-        except ValueError:
-            await send_message(update, context, "Please select a valid quantity (1, 2, or 3).", reply_markup=QUANTITY_MARKUP)
+        if not draft_text:
+            await send_message(update, context, "Something went wrong, I lost the draft text. Please start again.", reply_markup=MAIN_MARKUP)
+            context.user_data.clear()
             return
 
-        context.user_data['quantity'] = quantity
-        topic = context.user_data['topic']
-        tone = context.user_data.get('tone')
+        # Check if valid choice
+        valid_choices = ["Make it Punchier 🥊", "Improve Clarity ✨", "Add Engagement Question❓", "Match My Style 🎨", "Suggest Hashtags #️⃣"]
+        if refinement_choice not in valid_choices:
+            await send_message(update, context, "Please choose a valid refinement option from the buttons.", reply_markup=REFINE_OPTIONS_MARKUP)
+            return
+
+        await update.message.reply_text(f"🤖 Okay, refining your draft to '{refinement_choice}'. Please wait...", reply_markup=MAIN_MARKUP)
+
+        # --- Build the Refinement Prompt ---
+        prompt_instruction = ""
         custom_style = context.user_data.get('custom_style')
 
-        tone_or_style_desc = f"'{tone}' tone" if tone else "your custom style"
-        await update.message.reply_text(
-            f"🤖 Okay, generating {quantity} thread(s) about '{topic}' using {tone_or_style_desc}. Please wait...",
-            reply_markup=MAIN_MARKUP
-        )
+        if refinement_choice == "Make it Punchier 🥊":
+            prompt_instruction = "Rewrite the text to be more concise, impactful, and attention-grabbing. Use stronger verbs and shorter sentences."
+        elif refinement_choice == "Improve Clarity ✨":
+            prompt_instruction = "Rewrite the text to be clearer, easier to understand, and remove any jargon or ambiguity."
+        elif refinement_choice == "Add Engagement Question❓":
+            prompt_instruction = "Rewrite the text and add a relevant, open-ended question at the end to encourage replies."
+        elif refinement_choice == "Match My Style 🎨":
+            if custom_style:
+                prompt_instruction = f"Rewrite the text to perfectly match the following writing style:\n\"\"\"\n{custom_style}\n\"\"\""
+            else:
+                await send_message(update, context, "You haven't set a custom style yet! Use `/setstyle [example]` first.", reply_markup=MAIN_MARKUP)
+                context.user_data.clear() # Clear state as the flow is broken
+                return
+        elif refinement_choice == "Suggest Hashtags #️⃣":
+            prompt_instruction = "Analyze the text and suggest 3-5 relevant and effective hashtags to maximize reach."
 
-        # --- Prompt Build Logic --- (Same V15 prompt structure)
-        if custom_style:
-            style_instruction = f"**STYLE GUIDE:** Mimic this style:\n\"\"\"\n{custom_style}\n\"\"\"\n"
-            profanity_rule = "**ULTRA-STRICT RULE: Your response MUST NOT contain ANY vulgarity or profanity. Absolutely none.**\n\n"
-        else: # No custom style
-            tone_description = ""
-            # ... (Keep all the elif blocks for tones and profanity rules the same as V15) ...
-            if tone == "Shitposter":
-                tone_description = "Witty, edgy, provocative, informal. Strong opinions. (Profanity allowed ONLY for this tone)."
-                profanity_rule = "**RULE: Profanity is allowed ONLY because the selected tone is 'Shitposter'.**\n\n"
-            elif tone == "Conversational":
-                tone_description = "Friendly, approachable, easy to read. **Absolutely NO profanity.**"
-                profanity_rule = "**ULTRA-STRICT RULE: Your response MUST NOT contain ANY vulgarity or profanity. Absolutely none.**\n\n"
-            elif tone == "Philosophical":
-                tone_description = "Deep, abstract, thought-provoking. **Formal language. Absolutely NO profanity.**"
-                profanity_rule = "**ULTRA-STRICT RULE: Your response MUST NOT contain ANY vulgarity or profanity. Absolutely none.**\n\n"
-            elif tone == "Researcher":
-                tone_description = "Data-driven, objective, analytical. **Formal language. Absolutely NO profanity.**"
-                profanity_rule = "**ULTRA-STRICT RULE: Your response MUST NOT contain ANY vulgarity or profanity. Absolutely none.**\n\n"
-            elif tone == "Trader":
-                tone_description = "Action-oriented, concise, market-focused. **Professional tone. Absolutely NO profanity.**"
-                profanity_rule = "**ULTRA-STRICT RULE: Your response MUST NOT contain ANY vulgarity or profanity. Absolutely none.**\n\n"
-            style_instruction = f"**TONE:** Write STRICTLY in this tone: **{tone_description}**"
-
-      # --- V16 PROMPT ---
         final_prompt = (
-            f"{profanity_rule}" # Apply profanity rule first
-            f"**TASK DEFINITION:**\n"
-            f"- **Topic:** '{topic}'\n"
-            f"- **Quantity:** You MUST generate EXACTLY {quantity} thread(s). NO MORE, NO LESS.\n\n"
-            f"**IMPERATIVE RULES (NON-NEGOTIABLE):**\n"
-            f"1.  **No Extra Text:** Your entire response MUST consist ONLY of the generated thread(s). Do NOT include ANY introductory sentences, commentary, notes, titles (unless part of the first tweet), review markers, or concluding remarks before, between, or after the threads.\n"
-            f"2.  **Focus:** Generate content ONLY about the specified Topic ('{topic}').\n"
-            f"3.  **Length:** Each thread MUST have EXACTLY 8 tweets (1/8 to 8/8). STOP WRITING after the 8th tweet for each thread.\n"
-            f"4.  **Completeness:** Ensure each tweet and thread is fully written.\n\n"
-            f"**INSTRUCTIONS:**\n"
-            f"You are an AI generating Twitter threads.\n"
-            f"1.  {style_instruction}\n" # Tone or Style
-            f"2.  **CONTENT:** Write insightful paragraphs for each tweet. No bullet points.\n"
-            f"3.  **FORMATTING (MUST FOLLOW EXACTLY - CRITICAL FOR READABILITY):**\n"
-            f"    - Start each tweet with 'X/8: ' (e.g., '1/8: ', '2/8: ', ... '8/8: ').\n"
-            f"    - **Separate each tweet with TWO new lines (`\\n\\n`).** This creates a visible paragraph break. Example:\n" # Specify TWO newlines
-            f"      1/8: [Text of first tweet]\n\n" # Explicit example
-            f"      2/8: [Text of second tweet]\n\n" # Explicit example
-            f"    - If generating >1 thread (and ONLY if requested quantity > 1), separate them with '--- THREAD 2 ---', '--- THREAD 3 ---'.\n"
-            f"    - Include relevant hashtags (#example) at the end of some tweets.\n\n"
-            f"**FINAL CHECK:** Ensure ZERO forbidden profanity (unless 'Shitposter'). Ensure EXACT quantity ({quantity}). Ensure EXACT length (8 tweets). Ensure correct **DOUBLE newline** formatting between tweets. Ensure ABSOLUTELY NO TEXT exists outside the requested thread(s)."
+            "**TASK:** You are an expert X/Twitter copy editor. The user has provided draft text and a refinement instruction. Your goal is to provide 1-2 improved versions based ONLY on the instruction. Respond ONLY with the refined text.\n\n"
+            "**DRAFT TEXT:**\n"
+            f"\"\"\"\n{draft_text}\n\"\"\"\n\n"
+            f"**REFINEMENT INSTRUCTION:** {prompt_instruction}\n\n"
+            "**OUTPUT:**\n"
+            "[Provide 1 or 2 refined versions of the draft text based on the instruction. Do not add any commentary before or after the refined text.]"
         )
-        # --- END OF V16 PROMPT ---
 
-        # --- Call API using the DEFAULT max_tokens (1024) ---
-        response = get_dobby_response(final_prompt) # No max_tokens argument needed here
+        # Get response from Dobby (using default max_tokens)
+        refined_text = get_dobby_response(final_prompt)
 
-        # Use the send_message function to handle potential splitting
-        await send_message(update, context, response, reply_markup=MAIN_MARKUP)
-
-        context.user_data.clear()
+        await send_message(update, context, refined_text, reply_markup=MAIN_MARKUP)
+        context.user_data.clear() # Clear state after successful refinement
         return
 
-# --- Main Bot Setup --- (Remains the same, registers all commands including set/clearstyle)
+# --- Main Bot Setup ---
 def main() -> None:
     if not TELEGRAM_TOKEN:
         print("Error: TELEGRAM_TOKEN not found. Please set it in your .env file.")
@@ -260,15 +238,15 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("about", about))
-    application.add_handler(CommandHandler("myideas", my_ideas))
+    # application.add_handler(CommandHandler("myideas", my_ideas)) # Removed
     application.add_handler(CommandHandler("cancel", cancel))
-    application.add_handler(CommandHandler("generatethread", handle_message))
-    # application.add_handler(CommandHandler("trending", trending)) # REMOVED
-    application.add_handler(CommandHandler("setstyle", set_style))
+    application.add_handler(CommandHandler("refine", refine_command)) # New command to start
+    # application.add_handler(CommandHandler("generatethread", handle_message)) # Removed
+    application.add_handler(CommandHandler("setstyle", set_style_command)) # Use specific name
     application.add_handler(CommandHandler("clearstyle", clear_style))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("Your AI Content Strategist (V13 - Reduced Tokens) is now online!") # Updated version name
+    print("Your AI Content Assistant (Refiner V1) is now online!")
     application.run_polling()
 
 if __name__ == '__main__':
