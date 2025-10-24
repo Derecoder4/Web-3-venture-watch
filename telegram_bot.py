@@ -1,4 +1,4 @@
-# telegram_bot.py (V17 - Refiner Focus)
+# telegram_bot.py (V19 - Refiner Focus + Examples)
 import os
 import requests
 from dotenv import load_dotenv
@@ -9,7 +9,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 load_dotenv()
 
 # --- Import Custom Modules ---
-from dobby_client import get_dobby_response
+from dobby_client import get_dobby_response # Assuming dobby_client.py uses max_tokens=1024
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
@@ -32,23 +32,32 @@ REFINE_OPTIONS_MARKUP = ReplyKeyboardMarkup(REFINE_OPTIONS_KEYBOARD, resize_keyb
 async def send_message(update: Update, context: CallbackContext, text: str, reply_markup=None):
     """Sends a message, splitting it simply by character limit if needed."""
     MAX_MESSAGE_LENGTH = 4096
+    if not text: # Handle empty responses
+        print("Warning: Attempted to send empty message.")
+        await update.message.reply_text("Sorry, I couldn't generate a response for that.", reply_markup=reply_markup)
+        return
+
     if len(text) <= MAX_MESSAGE_LENGTH:
-        await update.message.reply_text(text, reply_markup=reply_markup)
+        try:
+            await update.message.reply_text(text, reply_markup=reply_markup)
+        except Exception as e:
+            print(f"Error sending single message part: {e}")
+            await update.message.reply_text("Error: Could not send the response.", reply_markup=reply_markup)
     else:
         parts = [text[i : i + MAX_MESSAGE_LENGTH] for i in range(0, len(text), MAX_MESSAGE_LENGTH)]
         for i, part in enumerate(parts):
-            # Send keyboard ONLY on the very last part
             final_markup = reply_markup if i == len(parts) - 1 else None
             try:
                 await update.message.reply_text(part, reply_markup=final_markup)
             except Exception as e:
                 print(f"Error sending message part {i+1}: {e}")
+                # Try to inform user on the last part if possible
                 if i == len(parts) - 1:
                      await update.message.reply_text("Error sending part of the message.", reply_markup=final_markup)
 
 
 # --- Command Handlers ---
-
+# (start, help_command, about, cancel, set_style_command, clear_style remain the same as V17)
 async def start(update: Update, context: CallbackContext) -> None:
     context.user_data.clear()
     welcome_text = (
@@ -120,6 +129,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     state = context.user_data.get('state')
 
     # --- 1. Handle Main Menu Buttons / Initial Input ---
+    # (This section remains the same as V17)
     if not state:
         if text == "✍️ Refine Draft":
             await refine_command(update, context)
@@ -134,7 +144,6 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             await about(update, context)
             return
 
-        # Treat as draft to refine
         context.user_data['draft_text'] = text
         await send_message(update, context, "Got the draft. How should I refine it?", reply_markup=REFINE_OPTIONS_MARKUP)
         context.user_data['state'] = STATE_WAITING_REFINEMENT_CHOICE
@@ -142,6 +151,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
     # --- 2. Handle Conversation States ---
     if state == STATE_WAITING_DRAFT:
+         # (This section remains the same as V17)
         context.user_data['draft_text'] = text
         await send_message(update, context, "Okay, got the draft. How should I refine it?", reply_markup=REFINE_OPTIONS_MARKUP)
         context.user_data['state'] = STATE_WAITING_REFINEMENT_CHOICE
@@ -161,66 +171,72 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             await send_message(update, context, "Please choose a valid option from the buttons.", reply_markup=REFINE_OPTIONS_MARKUP)
             return
 
-        # Send thinking message
         thinking_message = await update.message.reply_text(f"🤖 Okay, refining using '{refinement_choice}'. Please wait...", reply_markup=MAIN_MARKUP)
 
-        # --- Build the V17 Refinement Prompt ---
+        # --- Build the V19 Refinement Prompt ---
         prompt_instruction = ""
         custom_style = context.user_data.get('custom_style')
+        output_example = "" # Variable for output examples
 
+        # Define instructions and examples for each choice
         if refinement_choice == "Make it Punchier 🥊":
             prompt_instruction = "Rewrite the text to be more concise, impactful, and attention-grabbing. Use stronger verbs and shorter sentences if possible."
+            output_example = "Example Output: [Rewritten, punchier version of the draft text]"
         elif refinement_choice == "Improve Clarity ✨":
             prompt_instruction = "Rewrite the text to be significantly clearer and easier to understand. Remove jargon or ambiguity."
+            output_example = "Example Output: [Rewritten, clearer version of the draft text]"
         elif refinement_choice == "Add Engagement Question❓":
             prompt_instruction = "Rewrite the text slightly if needed for flow, and add a relevant, open-ended question at the end designed to encourage replies and discussion."
+            output_example = "Example Output: [Rewritten draft text, ending with an engaging question?]"
         elif refinement_choice == "Match My Style 🎨":
             if custom_style:
                 prompt_instruction = f"Rewrite the text to perfectly match the tone, vocabulary, and sentence structure of the following writing style example:\n\"\"\"\n{custom_style}\n\"\"\""
+                output_example = "Example Output: [Draft text rewritten in the exact style of the provided example.]"
             else:
-                await thinking_message.delete() # Delete "thinking" message
+                await thinking_message.delete()
                 await send_message(update, context, "You haven't set a custom style yet! Use `/setstyle [example]` first.", reply_markup=MAIN_MARKUP)
                 context.user_data.clear()
                 return
         elif refinement_choice == "Suggest Hashtags #️⃣":
-            prompt_instruction = "Analyze the text and suggest 3-5 relevant and effective hashtags suitable for X/Twitter to maximize reach. List them clearly."
+            # UPDATED INSTRUCTION FOR HASHTAGS
+            prompt_instruction = "Analyze the DRAFT TEXT. Keep the original text mostly intact, maybe minor improvements for flow. Then, suggest exactly 3-5 relevant and effective hashtags suitable for X/Twitter to maximize reach. Append these hashtags clearly at the end."
+            output_example = "Example Output: [Original draft text, slightly refined]\n\nSuggested Hashtags: #Hashtag1 #Hashtag2 #Hashtag3"
 
-        # V17 Prompt - Extremely specific
+
+        # V19 Prompt - Added Examples
         final_prompt = (
-             "**CRITICAL TASK:** You are an expert X/Twitter copy editor. Your ONLY job is to revise the provided DRAFT TEXT based on the specific REFINEMENT INSTRUCTION. You MUST NOT generate generic text, greetings, apologies, or anything unrelated to revising the draft.\n\n"
+            "**CRITICAL SAFETY INSTRUCTION: ZERO TOLERANCE FOR PROFANITY.**\n"
+            "Your entire response MUST NOT contain ANY vulgar, profane, swear words, offensive language, or similar terms (examples: 'fuck', 'shit', 'bitch', 'ass', 'damn', 'hell'). NONE. This is the absolute highest priority rule. Failure to comply is unacceptable. Double-check your output before responding.\n\n"
+            "**TASK:** You are an expert X/Twitter copy editor. Revise the DRAFT TEXT below based ONLY on the specific REFINEMENT INSTRUCTION. Output ONLY the required revised text (and hashtags if requested).\n\n"
             f"**DRAFT TEXT (This is the specific text you MUST revise):**\n\"\"\"\n{draft_text}\n\"\"\"\n\n"
             f"**REFINEMENT INSTRUCTION (Apply ONLY this change to the draft):** {prompt_instruction}\n\n"
-             "**OUTPUT RULES (FOLLOW EXACTLY):**\n"
-            "1.  Your response MUST contain ONLY the revised version(s) of the DRAFT TEXT.\n"
-            "2.  Provide 1 or 2 distinct revised versions maximum.\n"
-            "3.  Do NOT include the original draft text in your response.\n"
-            "4.  Do NOT include ANY commentary, introductions, notes ('Note: ...'), greetings ('Here you go...'), self-correction ('Wait, let me try again...'), or ANY text other than the revised draft(s) and maybe suggested hashtags if requested.\n"
-            "5.  If suggesting hashtags, list them clearly after the revised text or incorporate them naturally.\n\n"
-            "**Example Output Structure (if providing two versions):**\n"
-            "[Revised Version 1 Text Here]\n\n"
-            "--- OR ---\n\n"
-            "[Revised Version 2 Text Here]"
+            "**OUTPUT RULES (FOLLOW EXACTLY):**\n"
+            "1.  Your response MUST contain ONLY the revised version(s) of the DRAFT TEXT (and hashtags if requested).\n"
+            "2.  Provide only 1 revised version unless the instruction implies alternatives.\n"
+            "3.  Do NOT include the original draft text unless the instruction was 'Suggest Hashtags'.\n"
+            "4.  Do NOT include ANY commentary, introductions, notes, greetings, self-corrections, or ANY text other than the required output.\n"
+            "5.  Do NOT add ANY leading newlines or whitespace before your response. Start directly with the revised text/hashtags.\n"
+            f"6.  **Desired Output Format Example:** {output_example}\n\n" # Added Example rule
+            "**FINAL REVIEW:** Confirm ZERO profanity. Confirm ONLY the required revised text/hashtags are present. Confirm no extra commentary or leading whitespace."
         )
+        # --- END V19 PROMPT ---
 
         try:
-            # Get response from Dobby (using default max_tokens)
             refined_text = get_dobby_response(final_prompt)
-
-            # Delete the "thinking" message before sending the result
             await thinking_message.delete()
-            # Use the send_message function to handle potential splitting
             await send_message(update, context, refined_text, reply_markup=MAIN_MARKUP)
 
         except Exception as e:
             print(f"Error during AI call or processing: {e}")
-            await thinking_message.delete() # Delete thinking message on error too
+            await thinking_message.delete()
             await send_message(update, context, "Sorry, an error occurred while generating the refinement.", reply_markup=MAIN_MARKUP)
 
         finally:
-             context.user_data.clear() # Clear state after attempt
+             context.user_data.clear()
         return
 
 # --- Main Bot Setup ---
+# (main function remains the same as V17)
 def main() -> None:
     if not TELEGRAM_TOKEN:
         print("Error: TELEGRAM_TOKEN not found. Please set it in your .env file.")
@@ -238,7 +254,7 @@ def main() -> None:
     application.add_handler(CommandHandler("clearstyle", clear_style))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("Your AI Content Assistant (Refiner V17) is now online!")
+    print("Your AI Content Assistant (Refiner V19) is now online!")
     application.run_polling()
 
 if __name__ == '__main__':
