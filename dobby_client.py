@@ -5,7 +5,7 @@ import requests
 # Make sure this is the correct API provider and endpoint
 API_URL = "https://api.fireworks.ai/inference/v1/completions"
 
-# Default max_tokens is now 1024
+# Default max_tokens is 1024, temperature lowered to 0.6
 def get_dobby_response(prompt: str, max_tokens: int = 1024) -> str:
     """
     Sends a prompt to the Dobby model via the Fireworks AI API.
@@ -24,8 +24,8 @@ def get_dobby_response(prompt: str, max_tokens: int = 1024) -> str:
     data = {
         "model": "accounts/sentientfoundation/models/dobby-unhinged-llama-3-3-70b-new",
         "prompt": prompt,
-        "max_tokens": max_tokens, # Use the passed-in value or default (1024)
-        "temperature": 0.7,
+        "max_tokens": max_tokens,
+        "temperature": 0.6, # <-- Lowered temperature
     }
 
     try:
