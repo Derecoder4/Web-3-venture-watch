@@ -50,18 +50,47 @@ FEED_URLS = {
 
 # --- Profanity Filter ---
 FORBIDDEN_WORDS = {
+    # Base words
     "fuck": "f***", "fucking": "f***", "shit": "s***", "ass": "a**",
     "asshole": "a**hole", "damn": "darn", "bitch": "b****",
+    # Common variations
+    "wtf": "w**", "stfu": "s***", "af": "a*", "fk": "f*",
+    "bullshit": "b*****", "crap": "c***", "hell": "h***",
+    # Crypto slang that might be inappropriate
+    "rekt": "affected", "ngmi": "not making it", "wagmi": "we'll make it",
+    # Additional variations
+    "fuckin": "f***", "fck": "f**", "fuk": "f**", "fuq": "f**",
+    "shtt": "s***", "sht": "s**", "bs": "b*",
+    # Mild but unprofessional terms
+    "suck": "poor", "sucks": "is poor", "stupid": "inadequate",
+    "dumb": "unwise", "idiot": "person", "moron": "person"
 }
 
 def filter_profanity(text: str) -> str:
-    """Replaces common profanities in the text."""
+    """Replaces common profanities in the text with more professional alternatives."""
     if not isinstance(text, str): return str(text) if text is not None else ""
-    words = text.split(); cleaned_words = []
+    
+    # Convert to lowercase for checking but keep original for non-matches
+    text_lower = text.lower()
+    
+    # First pass: Replace whole words
+    for bad_word, replacement in FORBIDDEN_WORDS.items():
+        # Create word boundary pattern for more accurate replacement
+        pattern = f"\\b{bad_word}\\b"
+        text_lower = text_lower.replace(bad_word, replacement)
+        text = text.lower().replace(bad_word, replacement)
+    
+    # Second pass: Check for any embedded bad words within words
+    words = text.split()
+    cleaned_words = []
     for word in words:
-        clean_word = word.strip('.,!?;:\'"').lower()
-        replacement = FORBIDDEN_WORDS.get(clean_word)
-        cleaned_words.append(word.lower().replace(clean_word, replacement) if replacement else word)
+        clean_word = word.lower()
+        # Check if any bad word is contained within this word
+        for bad_word, replacement in FORBIDDEN_WORDS.items():
+            if bad_word in clean_word and len(bad_word) > 2:  # Avoid replacing short common sequences
+                clean_word = clean_word.replace(bad_word, replacement)
+        cleaned_words.append(clean_word)
+    
     return " ".join(cleaned_words)
 
 # --- Utility Function for Sending Messages (Simple Split) ---
