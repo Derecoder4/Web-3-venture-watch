@@ -186,12 +186,26 @@ async def get_news_digest(update: Update, context: CallbackContext, category: st
         await send_message(update, context, combined_articles, reply_markup=MAIN_MARKUP)
         return
 
-    # --- V22 PROMPT ---
+    # --- V23 PROMPT ---
     final_prompt = (
-            "**ABSOLUTE RULES (FAILURE IS NOT AN OPTION):**\n"
-            "1.  **ZERO PROFANITY:** Output MUST NOT contain ANY vulgar, profane, swear words, offensive language (e.g., 'fuck', 'shit', 'bitch', 'ass', 'damn', 'hell'). NONE. Response must be 100% professional.\n"
-            "2.  **CRYPTO STARTUPS ONLY:** Summarize ONLY information *directly related* to **crypto startups** from the snippets. IGNORE ALL non-crypto news.\n"
-            "3.  **OUTPUT DIGEST ONLY:** Your response MUST contain ONLY the formatted summary digest. ABSOLUTELY NO commentary, greetings, notes, self-corrections ('Wait...', 'Let me try again...'), apologies, introductions, conclusions, meta-commentary about the rules, or ANY text before or after the digest.\n\n"
+            "**SYSTEM CONFIGURATION:**\n"
+            "You are a professional crypto analyst. Maintain formal, objective tone. No slang, no casual expressions.\n\n"
+            "**STRICT OUTPUT RULES:**\n"
+            "1. STRUCTURE: Output ONLY these elements in order:\n"
+            f"   - Title: ### Recent Crypto {category.capitalize()} Startup Highlights\n"
+            "   - 4-6 bullet points (no more, no less)\n"
+            "   - ONE blank line between points\n"
+            "2. FORMAT:\n"
+            "   - Use '* ' for bullet points\n"
+            "   - End each point with a period\n"
+            "   - NO extra text before or after digest\n"
+            "   - NO repetition of content\n"
+            "   - NO meta-commentary or instructions\n"
+            "3. LANGUAGE:\n"
+            "   - Professional vocabulary only\n"
+            "   - NO slang, casual phrases, or metaphors\n"
+            "   - NO exclamation marks\n"
+            "   - NO editorializing ('like a boss', 'proving X', etc)\n\n"
             "**ROLE:** Professional crypto venture analyst. Tone: Insightful, objective, concise.\n\n"
             "**TASK:** Read ARTICLE SNIPPETS. Create a brief, bulleted summary of important developments related to **crypto startups**, focusing on {prompt_focus}.\n\n"
             "**ARTICLE SNIPPETS:**\n"
@@ -212,6 +226,15 @@ async def get_news_digest(update: Update, context: CallbackContext, category: st
         # --- END OF V22 PROMPT ---
     summary = get_dobby_response(final_prompt)
     cleaned_summary = filter_profanity(summary)
+    
+    # Clean up repetitive text and enforce single digest
+    if "### Recent Crypto" in cleaned_summary:
+        # Keep only the first digest section
+        cleaned_summary = cleaned_summary.split("### Recent Crypto")[1]
+        cleaned_summary = "### Recent Crypto" + cleaned_summary.split("100% follow")[0].strip()
+    
+    # Enforce character limit
+    cleaned_summary = cleaned_summary[:2000]  # Set a reasonable limit
 
     await thinking_message.delete()
     await send_message(update, context, cleaned_summary, reply_markup=MAIN_MARKUP)
