@@ -1,40 +1,38 @@
-AI Content Strategist Bot for Telegram 🤖
-A Telegram bot built for the Sentient Builder Program that acts as an AI-powered content assistant for creators, researchers, and builders in the Web3 and AI space.
+Crypto Startup Pulse Bot 🚀
+A Telegram bot built for the Sentient Builder Program that acts as your AI analyst for the crypto startup scene. It monitors various crypto and tech news RSS feeds and uses Sentient's Dobby model (via Fireworks AI) to provide summarized digests of recent developments.
 
-This bot helps you overcome writer's block by generating structured and engaging X (formerly Twitter) thread ideas. By providing a simple topic, you'll receive multiple thread outlines, each complete with a powerful hook, key discussion points, and a question to drive engagement.
+✨ Capabilities
+News Aggregation: Fetches recent news articles from multiple RSS feeds (Cointelegraph, Decrypt, TechCrunch, etc.).
 
+AI Summarization: Uses the Dobby LLM to read article snippets and generate concise, bulleted summaries focused on crypto startups.
 
-✨ Key Features
-Generate Structured Ideas: Get complete thread outlines, not just loose concepts.
+Categorized Digests: Provides summaries tailored to specific areas:
 
-High-Quality Content: Outlines include a hook, key points, and a concluding thought.
+General crypto startup news (/latest)
 
-AI-Powered: Utilizes Sentient's dobby-unhinged-llama-3-3-70b-new model to ensure creative and relevant content.
+Funding rounds (/funding - uses TechCrunch, AI filters for crypto)
 
-🛠️ Technology Stack
-Language: Python
+DeFi startups (/defi)
 
-AI Model: Sentient's dobby-unhinged-llama-3-3-70b-new
+Web3 Gaming startups (/web3gaming)
 
-API Provider: Fireworks AI
+Profanity Filtering: Includes a basic Python filter to reduce (but not eliminate) profanity from the AI's output.
 
-Telegram Framework: python-telegram-bot
-
-🚀 Getting Started
-Follow these instructions to get a copy of the project up and running on your local machine.
+🛠️ Setup (Local Development)
+Follow these steps to run the bot on your own machine.
 
 Prerequisites
-Python 3.10+ installed
+Python 3.10+ installed.
 
-Git installed
+Git installed.
 
-Installation & Setup
+Installation
 Clone the repository:
 
 Bash
 
-git  https://github.com/Derecoder4/sentient-ai-content-bot.git
-cd Doddy-framework-guide
+git https://github.com/Derecoder4/Web-3-venture-watch.git
+cd Web-3-venture-watch
 Create and activate a virtual environment:
 
 On Windows:
@@ -49,41 +47,58 @@ Bash
 
 python3 -m venv venv
 source venv/bin/activate
-Install the required dependencies:
+(You should see (venv) in your terminal prompt).
+
+Install dependencies:
 
 Bash
 
 pip install -r requirements.txt
-Configure your environment variables:
+Configure environment variables:
 
-Create a new file named .env in the root of the project.
+Create a file named .env in the project root.
 
-Copy the contents of the example below into your new file.
+Add your secret keys:
 
-Add your secret API keys to the file.
+Code snippet
 
-Your .env file should look like this:
+# Get from Telegram @BotFather
+TELEGRAM_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
 
-# Get this from Telegram's @BotFather
-TELEGRAM_TOKEN=123456:ABC-DEF1234567890
-
-# Get this from your Fireworks AI account dashboard
-FIREWORKS_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxx
+# Get from Fireworks AI dashboard
+FIREWORKS_API_KEY=YOUR_FIREWORKS_AI_KEY
 Running the Bot
-With your virtual environment active, run the following command in your terminal:
+With your virtual environment active, run:
 
 Bash
 
 python telegram_bot.py
-You should see the message: Your AI Content Strategist is now online!
+You should see the message: Your Crypto Startup Pulse Bot (...) is now online!
 
-Usage
-Interact with the bot directly inside your Telegram app.
+🚀 How to Use
+Interact with the bot in your Telegram chat:
 
-Start the bot:
+/start: Initializes the bot and shows the main keyboard.
 
-/start
-Generate thread ideas:
+/latest: Get a summary of recent general crypto startup news.
 
-/thread_ideas [your topic here]
-Example: /thread_ideas the future of decentralized identity
+/funding: Get a summary of recent funding rounds (pulls from TechCrunch, AI attempts to filter for crypto).
+
+/defi: Get a summary of recent news about DeFi startups.
+
+/web3gaming: Get a summary of recent news about Web3 Gaming startups.
+
+/help: Shows the list of commands.
+
+/about: Displays information about the bot.
+
+You can also use the persistent keyboard buttons as shortcuts for the main commands.
+
+⚠️ Limitations
+Dobby Model Personality: The underlying Dobby model is designed to be "blunt, a bit rude, and often controversial." While prompts and filters attempt to enforce professionalism, occasional profanity or unwanted commentary may still leak through, especially in complex summarization tasks.
+
+RSS Feed Dependency: The quality and relevance of the news digests depend entirely on the content available in the configured RSS feeds. The /funding command relies on the general TechCrunch feed, so its crypto relevance may vary. Feed URLs might break or change over time.
+
+Summarization Accuracy: LLM summaries might occasionally miss nuances, hallucinate details not present in the source text, or misinterpret complex information. The bot attempts to mitigate this by instructing Dobby to use only the provided snippets.
+
+No Memory/Refinement: The bot processes each command independently and doesn't remember past conversations or allow for refining the generated summaries.
