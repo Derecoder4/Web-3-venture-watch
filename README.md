@@ -31,8 +31,8 @@ Clone the repository:
 
 Bash
 
-git clone https://github.com/Angelokhare/Doddy-framework-guide.git
-cd Doddy-framework-guide
+git https://github.com/Derecoder4/Web-3-venture-watch.git
+cd Web-3-venture-watch
 Create and activate a virtual environment:
 
 On Windows:
