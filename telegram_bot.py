@@ -157,22 +157,30 @@ async def get_news_digest(update: Update, context: CallbackContext, category: st
         await send_message(update, context, combined_articles, reply_markup=MAIN_MARKUP)
         return
 
-    # V21 Prompt for News Digest
+    # --- V22 PROMPT ---
     final_prompt = (
-        "**ULTRA-STRICT RULE 1: ZERO PROFANITY.** Your output MUST NOT contain ANY vulgar, profane, swear words, offensive language, or similar terms (e.g., 'fuck', 'shit', 'bitch', 'ass', 'damn', 'hell'). NONE. Violation of this rule is a critical failure.\n\n"
-        "**ULTRA-STRICT RULE 2: CRYPTO STARTUPS ONLY.** You MUST filter the provided ARTICLE SNIPPETS and ONLY summarize information *directly related* to **crypto startups** (companies, projects, funding in the blockchain/crypto/web3 space). Ignore ALL non-crypto news (e.g., general tech, politics, mobility).\n\n"
-        "**ULTRA-STRICT RULE 3: NO EXTRA TEXT.** Your response MUST contain ONLY the summary digest. Do NOT include ANY commentary, greetings, notes, self-corrections, apologies, or ANY text before or after the digest.\n\n"
-        "**ROLE:** You are a professional crypto venture analyst. Tone: Insightful, objective, concise, 100% professional.\n\n"
-        "**TASK:** Read the ARTICLE SNIPPETS. Create a brief, bulleted summary highlighting important developments related to **crypto startups**, focusing specifically on {prompt_focus}.\n\n"
-        "**ARTICLE SNIPPETS:**\n"
-        f"\"\"\"\n{combined_articles}\n\"\"\"\n\n"
-        "**OUTPUT FORMAT (FOLLOW EXACTLY):**\n"
-        f"- Start with the heading: `### Recent Crypto {category.capitalize()} Startup Highlights`\n"
-        "- Use bullet points (`* `) for key news related ONLY to crypto startups.\n"
-        "- Be factual, extract info ONLY from snippets. Keep it concise (4-6 points max).\n\n"
-        "**FINAL REVIEW:** Confirm ZERO profanity. Confirm ONLY crypto startup news is included. Confirm NO extra text exists. Confirm formatting is perfect."
-    )
-
+            "**ABSOLUTE RULES (FAILURE IS NOT AN OPTION):**\n"
+            "1.  **ZERO PROFANITY:** Output MUST NOT contain ANY vulgar, profane, swear words, offensive language (e.g., 'fuck', 'shit', 'bitch', 'ass', 'damn', 'hell'). NONE. Response must be 100% professional.\n"
+            "2.  **CRYPTO STARTUPS ONLY:** Summarize ONLY information *directly related* to **crypto startups** from the snippets. IGNORE ALL non-crypto news.\n"
+            "3.  **OUTPUT DIGEST ONLY:** Your response MUST contain ONLY the formatted summary digest. ABSOLUTELY NO commentary, greetings, notes, self-corrections ('Wait...', 'Let me try again...'), apologies, introductions, conclusions, meta-commentary about the rules, or ANY text before or after the digest.\n\n"
+            "**ROLE:** Professional crypto venture analyst. Tone: Insightful, objective, concise.\n\n"
+            "**TASK:** Read ARTICLE SNIPPETS. Create a brief, bulleted summary of important developments related to **crypto startups**, focusing on {prompt_focus}.\n\n"
+            "**ARTICLE SNIPPETS:**\n"
+            f"\"\"\"\n{combined_articles}\n\"\"\"\n\n"
+            "**OUTPUT FORMAT (FOLLOW *EXACTLY*):**\n"
+            f"- Start with the heading: `### Recent Crypto {category.capitalize()} Startup Highlights`\n"
+            "- Use bullet points (`* `) for key news related ONLY to crypto startups.\n"
+            "- **Add ONE blank line BETWEEN each bullet point.** (Crucial for spacing).\n" # Added explicit spacing rule
+            "- Be factual, use info ONLY from snippets. Keep it concise (4-6 points max).\n\n"
+            "**EXAMPLE STRUCTURE (Use this spacing):**\n"
+            "### Recent Crypto Funding Startup Highlights\n"
+            "* [Bullet point 1 text].\n\n" # Example with spacing
+            "* [Bullet point 2 text].\n\n" # Example with spacing
+            "* [Bullet point 3 text].\n\n" # Example with spacing
+            # (... continue for 4-6 points total)\n\n" # Final spacing reminder
+            "**FINAL REVIEW:** Confirm ZERO profanity. Confirm ONLY crypto startup news. Confirm ONLY the digest is present (NO extra text). Confirm spacing between bullet points."
+        )
+        # --- END OF V22 PROMPT ---
     summary = get_dobby_response(final_prompt)
     cleaned_summary = filter_profanity(summary)
 
